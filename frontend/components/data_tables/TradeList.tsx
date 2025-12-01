@@ -1,0 +1,1 @@
+// Component to display detailed trade list metrics

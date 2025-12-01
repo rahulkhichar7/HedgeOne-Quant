@@ -1,0 +1,1 @@
+# Converts Pandas/VectorBT objects to Pydantic/JSON

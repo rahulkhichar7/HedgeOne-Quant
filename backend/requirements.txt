@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+vectorbt
+pandas
+pydantic
+plotly
+requests
+anywidget
+nbformat
+pandas
+matplotlib

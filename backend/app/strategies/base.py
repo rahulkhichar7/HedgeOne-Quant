@@ -1,0 +1,1 @@
+# Abstract Base Class for all strategies

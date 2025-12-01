@@ -1,0 +1,1 @@
+# Data fetching: CSV reader / DB query adapter

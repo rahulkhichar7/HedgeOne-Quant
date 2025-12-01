@@ -1,0 +1,1 @@
+# Strategy registry (STRATEGY_REGISTRY dict)
