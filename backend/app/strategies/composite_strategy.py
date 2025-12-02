@@ -1,1 +1,0 @@
-# Composite (AND/OR) strategy logic

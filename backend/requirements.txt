@@ -9,3 +9,5 @@ anywidget
 nbformat
 pandas
 matplotlib
+fyers_apiv3
+dotenv
