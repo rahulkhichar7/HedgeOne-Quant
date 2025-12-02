@@ -1,0 +1,1 @@
+remove a file from git: git rm --cached file_directory

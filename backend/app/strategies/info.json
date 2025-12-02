@@ -1,0 +1,158 @@
+{
+  "EMA_CROSS": {
+    "name": "EMA Crossover",
+    "details": "Buy when Fast EMA crosses above Slow EMA; Sell when Fast EMA crosses below Slow EMA.",
+    "inputs": [
+      {"name": "fast_window", "type": "int", "default": 9, "description": "Fast EMA period (Recommended: 2+)"},
+      {"name": "slow_window", "type": "int", "default": 26, "description": "Slow EMA period (Recommended: 3+)"}
+    ]
+  },
+  "SMA_GOLDEN_CROSS": {
+    "name": "SMA Golden Cross",
+    "details": "Classic long-term trend strategy. Buy: SMA 50 crosses above SMA 200.",
+    "inputs": [
+      {"name": "fast_window", "type": "int", "default": 50, "description": "Fast SMA period (Recommended: 10+)"},
+      {"name": "slow_window", "type": "int", "default": 200, "description": "Slow SMA period (Recommended: 100+)"}
+    ]
+  },
+  "HULL_MA_CROSS": {
+    "name": "Hull MA Crossover",
+    "details": "Fast/Slow crossover using the smoother Hull Moving Average (HMA).",
+    "inputs": [
+      {"name": "fast_window", "type": "int", "default": 20, "description": "Fast HMA period (Recommended: 5+)"},
+      {"name": "slow_window", "type": "int", "default": 50, "description": "Slow HMA period (Recommended: 10+)"}
+    ]
+  },
+  "TMA_THRESHOLD": {
+    "name": "Triangular MA Threshold",
+    "details": "Buy/Sell when price crosses above/below a single Triangular MA.",
+    "inputs": [
+      {"name": "window", "type": "int", "default": 30, "description": "TMA period (Recommended: 5+)"},
+      {"name": "threshold_pct", "type": "float", "default": 0.005, "description": "Price deviation threshold (%) (Recommended: 0.001+)"}
+    ]
+  },
+  "VWMA_TREND": {
+    "name": "Volume Weighted MA Trend",
+    "details": "Enter when price crosses above a single VWMA; exit when it crosses below.",
+    "inputs": [
+      {"name": "window", "type": "int", "default": 20, "description": "VWMA period (Recommended: 5+)"}
+    ]
+  },
+  "RSI_CLASSIC": {
+    "name": "RSI Classic Overbought/Oversold",
+    "details": "Buy when RSI crosses above Oversold (30); Sell when RSI crosses below Overbought (70).",
+    "inputs": [
+      {"name": "window", "type": "int", "default": 14, "description": "RSI period (Recommended: 7+)"},
+      {"name": "oversold", "type": "int", "default": 30, "description": "Oversold threshold (Recommended: 5-45)"},
+      {"name": "overbought", "type": "int", "default": 70, "description": "Overbought threshold (Recommended: 55-95)"}
+    ]
+  },
+  "STOCHASTIC_CROSS": {
+    "name": "Stochastic K/D Crossover",
+    "details": "Buy when %K crosses above %D in the oversold zone; Sell when %K crosses below %D in the overbought zone.",
+    "inputs": [
+      {"name": "k_window", "type": "int", "default": 14, "description": "Stoch %K period (Recommended: 7+)"},
+      {"name": "d_window", "type": "int", "default": 3, "description": "Stoch %D window (Recommended: 1+)"},
+      {"name": "oversold", "type": "int", "default": 20, "description": "Oversold level (Recommended: 5-30)"}
+    ]
+  },
+  "MACD_ZERO_CROSS": {
+    "name": "MACD Zero Line Crossover",
+    "details": "Buy when MACD crosses above the zero line; Sell when MACD crosses below the zero line.",
+    "inputs": [
+      {"name": "fast_window", "type": "int", "default": 12, "description": "MACD Fast MA period (Recommended: 5+)"},
+      {"name": "slow_window", "type": "int", "default": 26, "description": "MACD Slow MA period (Recommended: 15+)"},
+      {"name": "signal_window", "type": "int", "default": 9, "description": "MACD Signal line period (Recommended: 5+)"}
+    ]
+  },
+  "CCI_THRESHOLD": {
+    "name": "Commodity Channel Index Threshold",
+    "details": "Buy when CCI crosses above 100; Sell when CCI crosses below -100.",
+    "inputs": [
+      {"name": "window", "type": "int", "default": 20, "description": "CCI period (Recommended: 10+)"}
+    ]
+  },
+  "PPO_CROSS": {
+    "name": "Percentage Price Oscillator Crossover",
+    "details": "Buy when PPO line crosses above PPO signal line.",
+    "inputs": [
+      {"name": "fast_window", "type": "int", "default": 12, "description": "PPO Fast MA period (Recommended: 5+)"},
+      {"name": "slow_window", "type": "int", "default": 26, "description": "PPO Slow MA period (Recommended: 15+)"},
+      {"name": "signal_window", "type": "int", "default": 9, "description": "PPO Signal line period (Recommended: 5+)"}
+    ]
+  },
+  "BBANDS_BREAKOUT": {
+    "name": "Bollinger Bands Breakout",
+    "details": "Buy when price closes above Upper Band; Sell when price closes below Lower Band (Volatility Breakout).",
+    "inputs": [
+      {"name": "window", "type": "int", "default": 20, "description": "BBands period (Recommended: 10+)"},
+      {"name": "std_dev", "type": "float", "default": 2.0, "description": "Standard Deviation multiplier (Recommended: 1.5+)"}
+    ]
+  },
+  "BBANDS_REVERSAL": {
+    "name": "Bollinger Bands Reversal",
+    "details": "Buy when price touches/crosses the Lower Band; Sell when price touches/crosses the Upper Band (Mean Reversion).",
+    "inputs": [
+      {"name": "window", "type": "int", "default": 20, "description": "BBands period (Recommended: 10+)"},
+      {"name": "std_dev", "type": "float", "default": 1.5, "description": "Standard Deviation multiplier (Recommended: 1.0+)"}
+    ]
+  },
+  "ATR_CHANNEL": {
+    "name": "ATR Trailing Stop Channel",
+    "details": "Buy when price crosses above (Close + ATR * Multiplier); Sell when price crosses below (Close - ATR * Multiplier).",
+    "inputs": [
+      {"name": "window", "type": "int", "default": 14, "description": "ATR period (Recommended: 5+)"},
+      {"name": "multiplier", "type": "float", "default": 2.5, "description": "ATR multiplier (Recommended: 1.0+)"}
+    ]
+  },
+  "CHANDELIER_EXIT": {
+    "name": "Chandelier Exit",
+    "details": "Uses ATR to set a trailing stop. Exit (Sell) when price closes below the Chandelier Exit Long line.",
+    "inputs": [
+      {"name": "window", "type": "int", "default": 22, "description": "ATR period for CE (Recommended: 10+)"},
+      {"name": "multiplier", "type": "float", "default": 3.0, "description": "ATR multiplier for CE (Recommended: 2.0+)"}
+    ]
+  },
+  "DONCHIAN_BREAKOUT": {
+    "name": "Donchian Channel Breakout",
+    "details": "Buy when price breaks the Upper Channel; Sell when price breaks the Lower Channel (Momentum).",
+    "inputs": [
+      {"name": "window", "type": "int", "default": 20, "description": "Donchian period (Recommended: 10+)"}
+    ]
+  },
+  "ADX_TREND_ENTRY": {
+    "name": "ADX Trend Confirmation",
+    "details": "Buy when +DI crosses above -DI AND ADX is above a confirmation threshold.",
+    "inputs": [
+      {"name": "window", "type": "int", "default": 14, "description": "ADX period (Recommended: 7+)"},
+      {"name": "adx_threshold", "type": "int", "default": 25, "description": "ADX minimum level for trend confirmation (Recommended: 15-40)"}
+    ]
+  },
+  "OBV_BREAKOUT": {
+    "name": "On-Balance Volume Breakout",
+    "details": "Buy when OBV closes above its MA; Sell when OBV closes below its MA.",
+    "inputs": [
+      {"name": "window", "type": "int", "default": 10, "description": "OBV MA period (Recommended: 5+)"}
+    ]
+  },
+  "MFI_OVERSOLD": {
+    "name": "Money Flow Index Overbought/Oversold",
+    "details": "Buy when MFI crosses above Oversold (20); Sell when MFI crosses below Overbought (80).",
+    "inputs": [
+      {"name": "window", "type": "int", "default": 14, "description": "MFI period (Recommended: 7+)"},
+      {"name": "oversold", "type": "int", "default": 20, "description": "Oversold threshold (Recommended: 10-30)"}
+    ]
+  },
+  "CMF_ZERO_CROSS": {
+    "name": "Chaikin Money Flow Zero Cross",
+    "details": "Buy when CMF crosses above the zero line; Sell when CMF crosses below the zero line.",
+    "inputs": [
+      {"name": "window", "type": "int", "default": 20, "description": "CMF period (Recommended: 10+)"}
+    ]
+  },
+  "COMPOSITE_FILTER": {
+    "name": "Composite Filter (AND/OR)",
+    "details": "Combines signals from 2 or more strategies using boolean logic.",
+    "inputs": [] 
+  }
+}

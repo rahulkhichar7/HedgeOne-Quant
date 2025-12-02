@@ -83,7 +83,7 @@ def get_data_by_DEI(symbol, resolution, start_date, end_date):
     return final_df
 
 
-def get_data_csv(csv_path, resolution, start_date, end_date):
+def get_data_from_csv(csv_path, resolution, start_date, end_date):
 
     def convert_resolution(res):
         res = res.lower()
@@ -103,8 +103,8 @@ def get_data_csv(csv_path, resolution, start_date, end_date):
         raise ValueError(f"Invalid resolution: {res}")
 
     df = pd.read_csv(csv_path)
-    df['time'] = pd.to_datetime(df['time'], format="%d/%m/%Y %H:%M:%S")
-    df = df.set_index("time")
+    df['date_time'] = pd.to_datetime(df['date_time'], format="%d/%m/%Y %H:%M:%S")
+    df = df.set_index("date_time")
 
     start_dt = pd.to_datetime(start_date, format="%d/%m/%Y %H:%M:%S")
     end_dt   = pd.to_datetime(end_date,   format="%d/%m/%Y %H:%M:%S")
@@ -193,11 +193,13 @@ def get_historical_data_by_fyers(symbol, resolution, start_date, end_date):
                                   "range_from": start, 
                                   "range_to": end})
         print(response)
-
-        if response["candles"]:
-            all_data.append(np.array(response["candles"]))
-        else:
-            raise Exception(f"Data not available for {start} to {end}")
+        try:
+            if response["candles"]:
+                all_data.append(np.array(response["candles"]))
+            else:
+                raise Exception(f"Data not available for {start} to {end}")
+        except Exception as e:
+            print(f"Error accured while extracting data from response: {e}")
     df = pd.DataFrame(np.vstack(all_data), columns=["date_time", "open", "high", "low", "close", "volume"])
     df["date_time"] = pd.to_datetime(df["date_time"], unit="s")
     df["date_time"] = df["date_time"].dt.tz_localize('utc').dt.tz_convert('Asia/Kolkata')
