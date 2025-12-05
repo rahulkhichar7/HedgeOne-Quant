@@ -1,1 +1,0 @@
-// Individual backtest results and deep analysis view

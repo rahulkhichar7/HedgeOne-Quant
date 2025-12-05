@@ -1,1 +1,0 @@
-// TradingView-style chart component (Lightweight Charts / Plotly)
