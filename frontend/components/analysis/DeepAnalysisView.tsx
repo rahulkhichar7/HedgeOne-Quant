@@ -1,1 +1,0 @@
-// Component for displaying time-slice analysis results
