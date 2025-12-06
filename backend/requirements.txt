@@ -11,3 +11,4 @@ pandas
 matplotlib
 fyers_apiv3
 dotenv
+pydantic_settings

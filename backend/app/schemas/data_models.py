@@ -1,38 +1,59 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import List, Tuple, Dict, Any
+from typing import List, Dict, Any, Tuple
 
-# --- OHLCV Data ---
-# For raw data transfer (used in /data endpoint)
+# ------------------------------------------------
+# A. DATA TRANSFER MODELS (Used by /data endpoint)
+# ------------------------------------------------
+
 class OHLCVData(BaseModel):
     date_time: datetime = Field(..., description="The candlestick timestamp.")
     open: float
     high: float
     low: float
     close: float
-    volume: int
+    volume: int = Field(..., description="Volume, stored as integer.")
 
-# --- Plotting/Indicator Data ---
-# Structure for a single line on the chart (e.g., EMA 9)
+class DataFetchResponse(BaseModel):
+    session_id: str = Field(..., description="Unique ID for the current analysis session.")
+    data: List[OHLCVData]
+
+# ------------------------------------------------
+# B. PLOTTING MODELS (Used inside BacktestResult)
+# ------------------------------------------------
+
 class PlotLine(BaseModel):
     name: str = Field(..., description="Name of the indicator line or equity curve.")
-    data: List[Tuple[datetime, float]] # (timestamp, value) pairs
+    # (timestamp, value) pairs
+    data: List[Tuple[datetime, float]] 
 
-# Structure for Buy/Sell Markers
 class SignalMarker(BaseModel):
     time: datetime
     price: float
-    signal_type: str = Field(..., description="'ENTRY', 'EXIT', or 'STOP_LOSS'")
+    signal_type: str = Field(..., description="'ENTRY', 'EXIT', or custom marker.") #... shows field is required
+    pnl: float = Field(0.0, description="P&L associated with this marker (for tooltips).")
 
-# Structure for Metrics
 class PerformanceMetrics(BaseModel):
-    total_return: float
-    max_drawdown: float
-    sharpe_ratio: float
-    win_rate: float
-    # Add other key VectorBT stats as you expand
+    total_return: float = Field(..., description="Total return percentage.")
+    max_drawdown: float = Field(..., description="Maximum drawdown percentage.")
+    sharpe_ratio: float = Field(..., description="Annualized Sharpe Ratio.")
+    win_rate: float = Field(..., description="Win rate percentage.")
+    trades_count: int = Field(..., description="Total number of trades executed.")
+    # Add other metrics here as you expand
 
-# Structure for Time-Slice Analysis (Timeline-wise result)
+# ------------------------------------------------
+# C. ANALYSIS MODELS (Used by /analysis/time_slice endpoint)
+# ------------------------------------------------
+
+class AnalysisMetricResult(BaseModel):
+    label: str = Field(..., description="The time slice label (e.g., 'Monday', 'January', '10').")
+    trades_count: int
+    total_return_pct: float
+    win_rate_pct: float
+    sharpe_ratio: float
+    max_drawdown_pct: float
+
 class TimeSliceAnalysisResult(BaseModel):
-    time_unit: str = Field(..., description="e.g., 'Day of Week', 'Month', 'Interval'")
-    results: List[Dict[str, Any]] # e.g., [{"label": "Monday", "total_return": 5.2}, ...]
+    """Container for one type of attribution analysis (e.g., Day of Week)."""
+    time_unit: str = Field(..., description="e.g., 'Day of Week', 'Month Name'.")
+    results: List[AnalysisMetricResult]

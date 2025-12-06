@@ -166,6 +166,7 @@ def get_historical_data_by_fyers(symbol, resolution, start_date, end_date):
     )
 
     AUTH_CODE = os.getenv("FYERS_AUTH_CODE")
+    # AUTH_CODE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiJDVjI2SExPOUpJIiwidXVpZCI6Ijg4NGQ4Y2RiNTU0NDRkY2VhOWVlOTYyNjBlZTk2MDNlIiwiaXBBZGRyIjoiIiwibm9uY2UiOiIiLCJzY29wZSI6IiIsImRpc3BsYXlfbmFtZSI6IkZBQzYyMzQ0Iiwib21zIjoiSzEiLCJoc21fa2V5IjoiNmU2ZTk3YzdhYTc1MDMyY2QxOTU1NGE0NjI1ZWQ1YWEyZmEyNWE2YTUyOTQ3NmI3MDkyZjI2ZDMiLCJpc0RkcGlFbmFibGVkIjoiTiIsImlzTXRmRW5hYmxlZCI6Ik4iLCJhdWQiOiJbXCJkOjFcIixcImQ6MlwiLFwieDowXCIsXCJ4OjFcIixcIng6MlwiXSIsImV4cCI6MTc2NDk0MTc5OCwiaWF0IjoxNzY0OTExNzk4LCJpc3MiOiJhcGkubG9naW4uZnllcnMuaW4iLCJuYmYiOjE3NjQ5MTE3OTgsInN1YiI6ImF1dGhfY29kZSJ9.qhjINXc4757edZGikNyPlPT9SnU60Y4kF96t2tsAQsY"
     if AUTH_CODE == None:
         print("Auth Code is missing")
         return
@@ -176,6 +177,7 @@ def get_historical_data_by_fyers(symbol, resolution, start_date, end_date):
     # print(access_token)
     if access_token == None:
         print("Couldn't generate access token")
+        print("Auth Code:: " ,AUTH_CODE)
         return
 
     fyers = fyersModel.FyersModel(

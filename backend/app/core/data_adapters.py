@@ -76,7 +76,7 @@ class DataAdapter:
     """Handles fetching raw market data."""
     
     def __init__(self, source: str = "csv"):
-        self.source = source
+        self.source = source #For future use, when we will have multiple resources of data
         
     async def fetch_data_to_df(
         self, 
