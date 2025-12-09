@@ -2,7 +2,7 @@ import pandas as pd
 from pydantic import BaseModel, Field
 from typing import Tuple, List
 import vectorbt as vbt
-from .base import BaseStrategy
+from base import BaseStrategy
 
 # --- 1. Trend Strategy: EMA Crossover (Flexible) ---
 class EMACrossParams(BaseModel):

@@ -10,7 +10,7 @@ from ..schemas.strategy_models import BacktestRequest, BacktestResult
 from ..schemas.strategy_models import StrategyConfig 
 from ..core.data_adapters import DataAdapter 
 from ..utils.df_converter import portfolio_to_result 
-from ..strategies import registry 
+from ..strategies import registry
 from ..strategies.base import BaseStrategy
 from ..core.caching import CachingService 
 
