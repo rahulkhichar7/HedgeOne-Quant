@@ -21,11 +21,10 @@ class DataFetchResponse(BaseModel):
 # ------------------------------------------------
 # B. PLOTTING MODELS (Used inside BacktestResult)
 # ------------------------------------------------
-
 class PlotLine(BaseModel):
     name: str = Field(..., description="Name of the indicator line or equity curve.")
     # (timestamp, value) pairs
-    data: List[Tuple[datetime, float]] 
+    data: List[Tuple[datetime, float]]
 
 class SignalMarker(BaseModel):
     time: datetime

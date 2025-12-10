@@ -5,51 +5,38 @@ from pathlib import Path
 
 from ...schemas.data_models import OHLCVData, DataFetchResponse
 from ...services.data_service import DataService
-from ...core.data_adapters import get_available_tickers
+from ...core.data_adapters import get_available_tickers, get_available_strategies, get_available_indicators, get_strategies_metadata, DataAdapter
 
 router = APIRouter()
 data_service = DataService()
 
-# --- Path to Strategy Metadata ---
-STRATEGIES_INFO_PATH = Path(__file__).parent.parent.parent / "strategies" / "info.json"
+# --- Path to data
+ASSET_PATH = Path(__file__).parent.parent.parent / "app" / "assets"
 
 
-@router.get("/tickers", response_model=List[str])
+@router.get("/tickers")
 async def get_available_tickers_list():
-    """Returns a list of all available stock/index names."""
     return get_available_tickers()
 
+@router.get("/indicators", response_model=List[str])
+async def get_available_indicators_list():
+    return get_available_indicators()
 
-@router.get("/data", response_model=DataFetchResponse)
-async def get_ohlcv_data(
-    ticker_name: str = Query(..., description="e.g. 'NIFTY 50'"),
-    start_date: str = Query(..., description="e.g. '01/01/2020 09:15:00'"),
-    end_date: str = Query(..., description="e.g. '31/12/2023 15:30:00'"),
-    interval: str = Query(..., description="e.g. '15m', '1d'")
-):
-    """Fetch OHLCV data, check cache, and create a session."""
-    try:
-        data_list, data_key = await data_service.get_historical_data(
-            ticker_name, start_date, end_date, interval
-        )
-
-        session_id = data_service.caching_service.create_session(
-            data_key, ticker_name, interval, start_date, end_date
-        )
-
-        return DataFetchResponse(session_id=session_id, data=data_list)
-
-    except (FileNotFoundError, ValueError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Data processing failed: {e}")
-
+@router.get("/strategies", response_model=List[str])
+async def get_available_strategies_list():
+    return get_available_strategies()
 
 @router.get("/strategies/metadata", response_model=Dict[str, Any])
-async def get_strategies_metadata():
-    """Returns strategy configuration from JSON."""
-    try:
-        with open(STRATEGIES_INFO_PATH, "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Strategy metadata file not found.")
+async def _get_strategies_metadata():
+    return get_strategies_metadata()
+
+@router.get("/data")
+async def get_ohlcv_data(
+    ticker_name: str = Query(..., description="e.g. 'NIFTY 50'"),
+    start_date: str = Query(..., description="e.g. '01/12/2024 09:15:00'"),
+    end_date: str = Query(..., description="e.g. '01/10/2025 15:30:00'"),
+    interval: str = Query(..., description="e.g. '15m', '1d'")
+):
+    adapter = DataAdapter()
+    data = await adapter.fetch_data_to_df(ticker_name = ticker_name, start_date=start_date, end_date=end_date, interval=interval)
+    return data # a json file with "data" as key

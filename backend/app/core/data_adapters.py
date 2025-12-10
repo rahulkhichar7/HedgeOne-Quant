@@ -1,20 +1,10 @@
 import pandas as pd
 from pathlib import Path
 import asyncio
-from typing import Tuple, Dict, Optional, List
+from typing import Tuple, Dict, Optional, List, Any
+import json
 
-SECURITIES: Dict[str, Tuple[str, str]] = {
-    "HDFC BANK LTD": ("NSE:HDFCBANK-EQ", "HDFCBANK.csv"),
-    "TATA CONSULTANCY SERVICES": ("NSE:TCS-EQ", "TCS.csv"),
-    "RELIANCE INDUSTRIES LTD": ("NSE:RELIANCE-EQ", "RELIANCE.csv"),
-    "INFOSYS LIMITED": ("NSE:INFY-EQ", "INFY.csv"),
-    "HINDUSTAN UNILEVER LTD": ("NSE:HINDUNILVR-EQ", "HINDUNILVR.csv"),
-    "NIFTY 50": ("NSE:NIFTY50-INDEX", "NIFTY50.csv"),
-    "NIFTY BANK": ("NSE:NIFTYBANK-INDEX", "NIFTYBANK.csv"),
-    "NIFTY IT": ("NSE:NIFTYIT-INDEX", "NIFTYIT.csv"),
-    "NIFTY MIDCAP 100": ("NSE:NIFTYMIDCAP100-INDEX", "NIFTYMIDCAP100.csv"),
-    "NIFTY FMCG": ("NSE:NIFTYFMCG-INDEX", "NIFTYFMCG.csv"),
-}
+ASSET_PATH = Path(__file__).parent.parent.parent / "app" / "assets"
 
 def convert_resolution(res: str) -> str:
     """Converts user resolution (e.g., '15m') to Pandas offset alias (e.g., '15T')."""
@@ -27,20 +17,22 @@ def convert_resolution(res: str) -> str:
     if res.endswith("y"): return res[:-1] + "Y"
     raise ValueError(f"Invalid resolution: {res}")
 
-def _load_and_resample_data(
-    ticker_name: str, 
-    resolution: str, 
-    start_date: str, 
-    end_date: str
-) -> pd.DataFrame:
+def _load_and_resample_data(ticker_name: str, resolution: str, start_date: str, end_date: str) -> pd.DataFrame:
+
     """Synchronous function to load and process data (run in a thread)."""
     PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
     CSV_ROOT = PROJECT_ROOT / "data"
 
-    if ticker_name not in SECURITIES:
-        raise ValueError(f"Ticker {ticker_name} not found in SECURITIES list.")
+    securities = get_ticker_file()
+    print(securities.keys())
+    print(ticker_name)
+    print(resolution)
+    print(start_date)
+    print(end_date)
+    if ticker_name not in securities.keys():
+        raise ValueError(f"Ticker {ticker_name} not found in Securities list.")
         
-    csv_filename = SECURITIES[ticker_name][1]
+    csv_filename = securities[ticker_name][1]
     csv_path = CSV_ROOT / csv_filename
 
     if not csv_path.exists():
@@ -48,7 +40,7 @@ def _load_and_resample_data(
 
     # 2. Load and clean DataFrame (synchronous part)
     df = pd.read_csv(csv_path)
-    df['date_time'] = pd.to_datetime(df['date_time'], format="%d/%m/%Y %H:%M:%S")
+    df['date_time'] = pd.to_datetime(df['date_time'], format="%Y-%m-%d %H:%M:%S")
     df = df.set_index("date_time")
 
     # 3. Resample and aggregate
@@ -73,8 +65,6 @@ def _load_and_resample_data(
 
 
 class DataAdapter:
-    """Handles fetching raw market data."""
-    
     def __init__(self, source: str = "csv"):
         self.source = source #For future use, when we will have multiple resources of data
         
@@ -84,8 +74,12 @@ class DataAdapter:
         start_date: str, 
         end_date: str, 
         interval: str
-    ) -> pd.DataFrame:
+    ) -> Dict[str,Any]:
         """Runs the synchronous data loading/resampling in a separate thread."""
+        print(ticker_name)
+        print(interval)
+        print(start_date)
+        print(end_date)
         if self.source == "csv":
             # Use asyncio.to_thread for the blocking I/O operation
             df = await asyncio.to_thread(
@@ -95,11 +89,50 @@ class DataAdapter:
                 start_date,
                 end_date
             )
-            return df
+            df = df.astype("str")
+            records = df.to_dict(orient="records")
+            return {"data": records}
         else:
             # Placeholder for future broker/DB logic
             raise NotImplementedError(f"Data source '{self.source}' not yet implemented.")
 
-# Helper to get ticker list for frontend dropdown
 def get_available_tickers() -> List[str]:
-    return list(SECURITIES.keys())
+    try:
+        with open(ASSET_PATH/"tickers.json", 'r') as f:
+            tickers = list(dict(json.load(f)).keys())
+            return tickers
+    except Exception as e:
+        print(f"Error duing loading ticker file: {e}")
+
+def get_ticker_file()->Dict[str,List[str]]:
+    try:
+        with open(ASSET_PATH/"tickers.json", 'r') as f:
+            tickers = json.load(f)
+            return dict(tickers)
+    except Exception as e:
+        print(f"Error duing loading ticker file: {e}")
+
+def get_available_indicators() -> List[str]:
+    try:
+        with open(ASSET_PATH/"indicators.json", 'r') as f:
+            indicators = list(dict(json.load(f)).keys())
+            return indicators
+    except Exception as e:
+        print(f"Error duing loading indicator file: {e}")
+
+def get_available_strategies() -> List[str]:
+    try:
+        with open(ASSET_PATH/"strategies.json", 'r') as f:
+            strategies = list(dict(json.load(f)).keys())
+            return strategies
+    except Exception as e:
+        print(f"Error duing loading strategies file: {e}")
+
+def get_strategies_metadata() -> Dict[str,Any]:
+    try:
+        with open(ASSET_PATH/"strategies.json", 'r') as f:
+            strategies = json.load(f)
+            return strategies
+    except Exception as e:
+        print(f"Error duing loading strategies metadata file: {e}")
+        

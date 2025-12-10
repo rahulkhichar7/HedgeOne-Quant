@@ -13,23 +13,6 @@ analysis_service = AnalysisService()
 caching_service = CachingService()
 
 
-# ----------------- STEP 2: Store Strategy -----------------
-@router.post("/session/{session_id}/update-strategy")
-async def update_session_strategy(
-    session_id: str,
-    strategy_config: StrategyConfig = Body(...)
-):
-    """Stores the user's chosen strategy parameters in cache."""
-    try:
-        caching_service.update_session(session_id, {"strategy": strategy_config.model_dump()})
-        return {"message": "Strategy configuration updated successfully."}
-
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update session: {str(e)}")
-
-
 # ----------------- STEP 3: Run Backtest -----------------
 @router.post("/backtest", response_model=BacktestResult)
 async def run_backtest_sync(
