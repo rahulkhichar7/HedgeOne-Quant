@@ -22,7 +22,7 @@ function typeOfSeries(type: string) {
     }
 }
 
-export function Chart({ data }: { data: ChartData[] }) {
+export function Chart({ data, isOpen}: { data: ChartData[], isOpen: boolean}) {
     const containerRef = useRef<HTMLDivElement>(null)
     const chartRef = useRef<IChartApi>(null)
 
@@ -36,7 +36,7 @@ export function Chart({ data }: { data: ChartData[] }) {
             chart.addSeries(typeOfSeries(dataSeries.type)).setData(dataSeries.data)
         }
 
-    })
+    }, [])
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -45,10 +45,14 @@ export function Chart({ data }: { data: ChartData[] }) {
             for (let entry of entries) {
                 console.log("Chart width:", entry.contentRect.width);
                 chartRef.current?.applyOptions({
-                    width: entry.contentRect.width
+                    width: entry.contentRect.width,
+                    height: entry.contentRect.height
                 })
             }
         });
+
+        chartRef.current.timeScale().fitContent()
+
 
         observer.observe(containerRef.current);
 
