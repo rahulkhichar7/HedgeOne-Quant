@@ -1,40 +1,157 @@
 {
     "Simple Moving Average (SMA)": {
         "object": "sma",
-        "details": "Calculates the average price over a specified number of periods",
+        "details": "Calculates the simple average of closing prices over a fixed window",
         "inputs": [
-            {
-                "name": "window",
-                "type": "int",
-                "default": 14,
-                "description": "Number of periods used to calculate SMA (Recommended: 5+)"
-            }
+            { "name": "window", "type": "int", "default": 14 }
         ]
     },
 
     "Exponential Moving Average (EMA)": {
         "object": "ema",
-        "details": "Calculates a weighted moving average giving more importance to recent prices",
+        "details": "Weighted moving average giving more importance to recent prices",
         "inputs": [
-            {
-                "name": "window",
-                "type": "int",
-                "default": 14,
-                "description": "Number of periods used to calculate EMA (Recommended: 5+)"
-            }
+            { "name": "window", "type": "int", "default": 14 }
+        ]
+    },
+
+    "Weighted Moving Average (WMA)": {
+        "object": "wma",
+        "details": "Moving average with linearly increasing weights",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 14 }
         ]
     },
 
     "Relative Strength Index (RSI)": {
         "object": "rsi",
-        "details": "Momentum oscillator that measures the speed and magnitude of recent price changes",
+        "details": "Momentum oscillator measuring overbought and oversold levels",
         "inputs": [
-            {
-                "name": "window",
-                "type": "int",
-                "default": 14,
-                "description": "Number of periods used to calculate RSI (Common: 14)"
-            }
+            { "name": "window", "type": "int", "default": 14 }
+        ]
+    },
+
+    "Moving Average Convergence Divergence (MACD)": {
+        "object": "macd",
+        "details": "Trend-following momentum indicator",
+        "inputs": [
+            { "name": "fast", "type": "int", "default": 12 },
+            { "name": "slow", "type": "int", "default": 26 },
+            { "name": "signal", "type": "int", "default": 9 }
+        ]
+    },
+
+    "Bollinger Bands": {
+        "object": "bbands",
+        "details": "Volatility bands around a moving average",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 20 },
+            { "name": "std", "type": "float", "default": 2 }
+        ]
+    },
+
+    "Average True Range (ATR)": {
+        "object": "atr",
+        "details": "Measures market volatility",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 14 }
+        ]
+    },
+
+    "Stochastic Oscillator": {
+        "object": "stoch",
+        "details": "Momentum indicator comparing close to price range",
+        "inputs": [
+            { "name": "k", "type": "int", "default": 14 },
+            { "name": "d", "type": "int", "default": 3 }
+        ]
+    },
+
+    "Commodity Channel Index (CCI)": {
+        "object": "cci",
+        "details": "Identifies cyclical trends",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 20 }
+        ]
+    },
+
+    "Williams %R": {
+        "object": "willr",
+        "details": "Momentum indicator showing overbought/oversold levels",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 14 }
+        ]
+    },
+
+    "Rate of Change (ROC)": {
+        "object": "roc",
+        "details": "Measures percentage price change",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 12 }
+        ]
+    },
+
+    "Momentum": {
+        "object": "momentum",
+        "details": "Difference between current price and price n periods ago",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 10 }
+        ]
+    },
+
+    "On Balance Volume (OBV)": {
+        "object": "obv",
+        "details": "Volume-based momentum indicator",
+        "inputs": []
+    },
+
+    "Money Flow Index (MFI)": {
+        "object": "mfi",
+        "details": "Volume-weighted RSI",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 14 }
+        ]
+    },
+
+    "Average Directional Index (ADX)": {
+        "object": "adx",
+        "details": "Measures trend strength",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 14 }
+        ]
+    },
+
+    "Parabolic SAR": {
+        "object": "psar",
+        "details": "Trend-following stop-and-reverse indicator",
+        "inputs": []
+    },
+
+    "Ichimoku Cloud": {
+        "object": "ichimoku",
+        "details": "Trend and momentum indicator",
+        "inputs": []
+    },
+
+    "Ultimate Oscillator": {
+        "object": "uo",
+        "details": "Momentum oscillator using multiple timeframes",
+        "inputs": []
+    },
+
+    "Chaikin Money Flow (CMF)": {
+        "object": "cmf",
+        "details": "Measures buying/selling pressure",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 20 }
+        ]
+    },
+
+    "Donchian Channels": {
+        "object": "donchian",
+        "details": "Breakout indicator based on price extremes",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 20 }
         ]
     }
 }

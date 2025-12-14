@@ -49,7 +49,7 @@ async def run_indicator(
     start_date: str = Query(default="01/12/2024 09:15:00", description="Start datetime (DD/MM/YYYY HH:MM:SS)"),
     end_date: str = Query(default="06/12/2024 15:30:00", description="End datetime (DD/MM/YYYY HH:MM:SS)"),
     interval: str = Query(default="1d", description="Candle interval (e.g. '5m', '15m', '1h', '1d')"),
-    indicator_name: str = Query(default="EMA", description="Indicator name (e.g. 'EMA', 'RSI')"),
+    indicator_name: str = Query(default="Exponential Moving Average (EMA)", description="Indicator name (e.g. 'EMA', 'RSI')"),
     params: str = Query(
         ...,
         description='Indicator parameters as JSON string. Example for EMA: {"window": 14}'

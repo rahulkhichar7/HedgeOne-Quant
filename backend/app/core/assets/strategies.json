@@ -1,45 +1,170 @@
 {
     "EMA Crossover": {
         "object": "ema_crossover",
-        "details": "Generates buy and sell signals based on the crossover of a short-term and long-term exponential moving average",
+        "details": "Buy when fast EMA crosses above slow EMA, sell on reverse crossover",
         "inputs": [
-            {
-                "name": "short_window",
-                "type": "int",
-                "default": 12,
-                "description": "Number of periods for the short-term EMA (Recommended: 5–20)"
-            },
-            {
-                "name": "long_window",
-                "type": "int",
-                "default": 26,
-                "description": "Number of periods for the long-term EMA (Recommended: 20–50)"
-            }
+            { "name": "short_window", "type": "int", "default": 12 },
+            { "name": "long_window", "type": "int", "default": 26 }
+        ]
+    },
+
+    "SMA Crossover": {
+        "object": "sma_crossover",
+        "details": "Buy when fast SMA crosses above slow SMA",
+        "inputs": [
+            { "name": "short_window", "type": "int", "default": 20 },
+            { "name": "long_window", "type": "int", "default": 50 }
         ]
     },
 
     "RSI": {
         "object": "rsi_strategy",
-        "details": "Generates buy and sell signals using RSI overbought and oversold levels",
+        "details": "Buy when RSI is oversold, sell when overbought",
         "inputs": [
-            {
-                "name": "window",
-                "type": "int",
-                "default": 14,
-                "description": "Number of periods used to calculate RSI"
-            },
-            {
-                "name": "overbought",
-                "type": "int",
-                "default": 70,
-                "description": "RSI level above which the asset is considered overbought"
-            },
-            {
-                "name": "oversold",
-                "type": "int",
-                "default": 30,
-                "description": "RSI level below which the asset is considered oversold"
-            }
+            { "name": "window", "type": "int", "default": 14 },
+            { "name": "oversold", "type": "int", "default": 30 },
+            { "name": "overbought", "type": "int", "default": 70 }
+        ]
+    },
+
+    "MACD": {
+        "object": "macd_strategy",
+        "details": "MACD line crossover with signal line",
+        "inputs": [
+            { "name": "fast", "type": "int", "default": 12 },
+            { "name": "slow", "type": "int", "default": 26 },
+            { "name": "signal", "type": "int", "default": 9 }
+        ]
+    },
+
+    "Bollinger Bands": {
+        "object": "bollinger_strategy",
+        "details": "Buy at lower band, sell at upper band",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 20 },
+            { "name": "std", "type": "int", "default": 2 }
+        ]
+    },
+
+    "VWAP": {
+        "object": "vwap_strategy",
+        "details": "Buy when price crosses above VWAP",
+        "inputs": []
+    },
+
+    "ADX Trend": {
+        "object": "adx_strategy",
+        "details": "Trend-following using ADX strength",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 14 },
+            { "name": "threshold", "type": "int", "default": 25 }
+        ]
+    },
+
+    "Stochastic Oscillator": {
+        "object": "stochastic_strategy",
+        "details": "Overbought/oversold stochastic strategy",
+        "inputs": [
+            { "name": "k_window", "type": "int", "default": 14 },
+            { "name": "d_window", "type": "int", "default": 3 }
+        ]
+    },
+
+    "CCI": {
+        "object": "cci_strategy",
+        "details": "Commodity Channel Index mean reversion",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 20 }
+        ]
+    },
+
+    "ROC": {
+        "object": "roc_strategy",
+        "details": "Rate of Change momentum strategy",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 12 }
+        ]
+    },
+
+    "Williams %R": {
+        "object": "williams_r_strategy",
+        "details": "Williams %R reversal strategy",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 14 }
+        ]
+    },
+
+    "ATR Breakout": {
+        "object": "atr_breakout",
+        "details": "Volatility breakout using ATR",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 14 }
+        ]
+    },
+
+    "Donchian Channel": {
+        "object": "donchian_strategy",
+        "details": "Breakout using Donchian channels",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 20 }
+        ]
+    },
+
+    "Momentum": {
+        "object": "momentum_strategy",
+        "details": "Simple price momentum strategy",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 10 }
+        ]
+    },
+
+    "EMA + RSI": {
+        "object": "ema_rsi_strategy",
+        "details": "EMA trend with RSI confirmation",
+        "inputs": [
+            { "name": "ema_window", "type": "int", "default": 50 },
+            { "name": "rsi_window", "type": "int", "default": 14 }
+        ]
+    },
+
+    "Mean Reversion": {
+        "object": "mean_reversion_strategy",
+        "details": "Mean reversion using SMA deviation",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 20 }
+        ]
+    },
+
+    "Price Channel": {
+        "object": "price_channel_strategy",
+        "details": "High-low channel breakout",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 20 }
+        ]
+    },
+
+    "RSI Divergence": {
+        "object": "rsi_divergence_strategy",
+        "details": "RSI divergence based reversal",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 14 }
+        ]
+    },
+
+    "EMA Pullback": {
+        "object": "ema_pullback_strategy",
+        "details": "Pullback entries in EMA trend",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 50 }
+        ]
+    },
+
+    "SuperTrend": {
+        "object": "supertrend_strategy",
+        "details": "Trend following SuperTrend",
+        "inputs": [
+            { "name": "window", "type": "int", "default": 10 },
+            { "name": "multiplier", "type": "int", "default": 3 }
         ]
     }
 }
