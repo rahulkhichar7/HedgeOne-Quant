@@ -13,8 +13,8 @@ def ema_crossover(df, short_window, long_window):
     fast = vbt.MA.run(close, window=short_window, ewm=True).ma
     slow = vbt.MA.run(close, window=long_window, ewm=True).ma
     return _result(
-        fast > slow & (fast.shift() <= slow.shift()),
-        fast < slow & (fast.shift() >= slow.shift()),
+        (fast > slow) & (fast.shift() <= slow.shift()),
+        (fast < slow) & (fast.shift() >= slow.shift()),
         {"ema_fast": fast, "ema_slow": slow}
     )
 
