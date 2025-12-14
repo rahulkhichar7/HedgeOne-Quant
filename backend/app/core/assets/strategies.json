@@ -1,0 +1,45 @@
+{
+    "EMA Crossover": {
+        "object": "ema_crossover",
+        "details": "Generates buy and sell signals based on the crossover of a short-term and long-term exponential moving average",
+        "inputs": [
+            {
+                "name": "short_window",
+                "type": "int",
+                "default": 12,
+                "description": "Number of periods for the short-term EMA (Recommended: 5–20)"
+            },
+            {
+                "name": "long_window",
+                "type": "int",
+                "default": 26,
+                "description": "Number of periods for the long-term EMA (Recommended: 20–50)"
+            }
+        ]
+    },
+
+    "RSI": {
+        "object": "rsi_strategy",
+        "details": "Generates buy and sell signals using RSI overbought and oversold levels",
+        "inputs": [
+            {
+                "name": "window",
+                "type": "int",
+                "default": 14,
+                "description": "Number of periods used to calculate RSI"
+            },
+            {
+                "name": "overbought",
+                "type": "int",
+                "default": 70,
+                "description": "RSI level above which the asset is considered overbought"
+            },
+            {
+                "name": "oversold",
+                "type": "int",
+                "default": 30,
+                "description": "RSI level below which the asset is considered oversold"
+            }
+        ]
+    }
+}

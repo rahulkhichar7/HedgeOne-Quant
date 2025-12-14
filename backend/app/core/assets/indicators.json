@@ -1,0 +1,40 @@
+{
+    "Simple Moving Average (SMA)": {
+        "object": "sma",
+        "details": "Calculates the average price over a specified number of periods",
+        "inputs": [
+            {
+                "name": "window",
+                "type": "int",
+                "default": 14,
+                "description": "Number of periods used to calculate SMA (Recommended: 5+)"
+            }
+        ]
+    },
+
+    "Exponential Moving Average (EMA)": {
+        "object": "ema",
+        "details": "Calculates a weighted moving average giving more importance to recent prices",
+        "inputs": [
+            {
+                "name": "window",
+                "type": "int",
+                "default": 14,
+                "description": "Number of periods used to calculate EMA (Recommended: 5+)"
+            }
+        ]
+    },
+
+    "Relative Strength Index (RSI)": {
+        "object": "rsi",
+        "details": "Momentum oscillator that measures the speed and magnitude of recent price changes",
+        "inputs": [
+            {
+                "name": "window",
+                "type": "int",
+                "default": 14,
+                "description": "Number of periods used to calculate RSI (Common: 14)"
+            }
+        ]
+    }
+}

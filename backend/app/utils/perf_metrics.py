@@ -1,1 +1,0 @@
-# Custom, non-VectorBT performance metric calculations

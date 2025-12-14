@@ -8,4 +8,4 @@ app = FastAPI(title="HedgeOne Quant API")
 # Register all routers
 app.include_router(data_router, prefix="/api/v1/data")
 app.include_router(backtest_router, prefix="/api/v1/backtest")
-app.include_router(user_router, prefix="/api/v1/user")
+app.include_router(user_router, prefix="")
