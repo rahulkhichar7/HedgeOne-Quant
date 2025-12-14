@@ -1,6 +1,6 @@
 from .momentum import ema, rsi
 
 INDICATOR_REGISTRY = {
-    "EMA": ema,
-    "RSI": rsi
+    "Exponential Moving Average (EMA)": ema,
+    "Relative Strength Index (RSI)": rsi
 }
