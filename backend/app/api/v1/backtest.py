@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query
-from typing import Any, Dict
+from typing import Dict, Any
 import vectorbt as vbt
 import pandas as pd
 import json
@@ -14,104 +14,144 @@ from ...services.data_services import _load_and_resample_data
 
 router = APIRouter()
 
-@router.post("/backtest", response_model=Dict[str,Any])
-async def run_backtest_sync(
-    ticker_name: str = Query(default="NIFTY 50", description="Trading symbol or index name (e.g. 'NIFTY 50', 'RELIANCE')"),
-    start_date: str = Query(default="01/12/2024 09:15:00", description="Start datetime in format DD/MM/YYYY HH:MM:SS"),
-    end_date: str = Query(default="10/04/2025 15:30:00", description="End datetime in format DD/MM/YYYY HH:MM:SS"),
-    interval: str = Query(default="15m", description="Candle interval (e.g. '5m', '15m', '1h', '1d')"),
-    strategy_name: str = Query(default="EMA Crossover", description="Strategy name (e.g. 'EMA Crossover', 'RSI')"),
-    params: str = Query({"short_window":5, "long_window":12}, description='Strategy parameters as a JSON string. Example for EMA Crossover: {"short_window": 13, "long_window": 24}'),
-    initial_cash: float = Query(100000.0, description="Enter cash amount eg. 100000"),
-    fees: float = Query(0.05, description="% commision on each transection eg. 0.05%"),
-    slippage: float = Query(0.0, description="slippage % eg. 0.0%"),
+
+@router.post("/backtest", response_model=Dict[str, Any])
+async def run_backtest(
+    ticker_name: str = Query("NIFTY 50"),
+    start_date: str = Query("01/12/2024 09:15:00"),
+    end_date: str = Query("10/04/2025 15:30:00"),
+    interval: str = Query("15m"),
+    strategy_name: str = Query("EMA Crossover"),
+    params: str = Query('{"short_window":5,"long_window":12}'),
+    initial_cash: float = Query(100000.0),
+    fees: float = Query(0.05),
+    slippage: float = Query(0.0),
 ):
+    print("\n========== BACKTEST START ==========")
+    print("Ticker:", ticker_name)
+    print("Interval:", interval)
+    print("Start:", start_date)
+    print("End:", end_date)
+
     fees /= 100
     slippage /= 100
-
     params = json.loads(params)
 
-    # -------- DATA -------- #
+    # ---------- DATA ----------
+    print("\n[DATA] Loading data...")
     df = await _load_and_resample_data(
-        ticker_name,
-        interval,
-        start_date,
-        end_date
+        ticker_name, interval, start_date, end_date
     )
-    print("backtest: data loaded")
-    print("\n\nDataFrame Head")
-    print(df.head())
-    print("\n\nDataFrame Tail")
-    print(df.tail())
-    print("\nDataFrame Shape: ", df.shape)
 
-    # -------- STRATEGY -------- #
+    print("[DATA] Loaded")
+    print("[DATA] DF shape:", df.shape)
+    print("[DATA] DF columns:", df.columns.tolist())
+    print("[DATA] Index type:", type(df.index))
+    print("[DATA] Index dtype:", df.index.dtype)
+    print("[DATA] Index sample:", df.index[:5])
+    print("[DATA] Index first:", df.index[0])
+    print("[DATA] Index last :", df.index[-1])
+
+    # ---------- STRATEGY ----------
+    print("\n[STRATEGY] Running:", strategy_name)
     strategy_fn = STRATEGY_REGISTRY[strategy_name]
-    print("backtest: strategy loaded")
-    result = strategy_fn(df, **params)
+    signals = strategy_fn(df, **params)
+
+    print("[STRATEGY] Signals created")
+    print("[STRATEGY] Entries count:", sum(signals["entries"]))
+    print("[STRATEGY] Exits count  :", sum(signals["exits"]))
 
     portfolio = await asyncio.to_thread(
         vbt.Portfolio.from_signals,
-        df["close"],
-        result["entries"],
-        result["exits"],
-        freq=pd.Timedelta(interval),
+        close=df["close"],
+        entries=signals["entries"],
+        exits=signals["exits"],
         init_cash=initial_cash,
         fees=fees,
-        slippage=slippage
+        slippage=slippage,
+        freq=pd.Timedelta(interval)
     )
-    print("backtest: Portfolio Created")
+    print("[PORTFOLIO] Created")
 
-    # -------- BACKTEST METRICS -------- #
-    backtest_metrics = portfolio.stats().to_dict()
+    # ---------- STATS ----------
+    print("\n[STATS] Computing stats...")
+    stats = portfolio.stats().to_dict()
+    print("[STATS] Total Trades:", stats.get("Total Trades"))
+    print("[STATS] Win Rate:", stats.get("Win Rate [%]"))
+    print("[STATS] Total Fees Paid:", stats.get("Total Fees Paid"))
+
     calendar_period = (
-    pd.to_datetime(end_date, dayfirst=True)
-    - pd.to_datetime(start_date, dayfirst=True)
-)
-    # print("\nCalender Period", calendar_period)
+        pd.to_datetime(end_date, dayfirst=True)
+        - pd.to_datetime(start_date, dayfirst=True)
+    )
+    stats["Calendar Period"] = format_timedelta(calendar_period)
 
-    backtest_metrics["Calendar Period"] = format_timedelta(calendar_period)
-
-
-    DURATION_KEYS = [
+    for k in [
         "Avg Winning Trade Duration",
         "Avg Losing Trade Duration",
         "Max Drawdown Duration",
         "Period"
-    ]
+    ]:
+        if k in stats:
+            stats[k] = format_timedelta(stats[k])
 
-    for key in DURATION_KEYS:
-        if key in backtest_metrics:
-            backtest_metrics[key] = format_timedelta(backtest_metrics[key])
+    # ---------- TRADES ----------
+    print("\n[TRADES] Extracting trades...")
+    trades_df = pd.DataFrame(portfolio.trades.records)
 
-    # print("Backtest Metrics")
-    # print(backtest_metrics)
+    print("[TRADES] Trades DF shape:", trades_df.shape)
+    print("[TRADES] Trades DF columns:", trades_df.columns.tolist())
 
-    # print("Portfolio trades:: ", portfolio.trades)
-    # # -------- TRADES -------- #
-    # trades_df = portfolio.trades.records.copy()
-    # trades_df.columns = trades_df.columns.str.lower().str.replace(" ", "_")
+    if trades_df.empty:
+        print("[TRADES] No trades found")
+        return {
+            "backtest_result": stats,
+            "time_slice_analysis": {}
+        }
 
-    # # keep only closed trades
-    # trades_df = trades_df[trades_df["status"] == "Closed"]
-    # print("\n\n\nTrade Readables")
-    # print(trades_df)
+    # Map entry_idx → real datetime
+    print("\n[TRADES] Mapping trade indices to timestamps...")
+    price_index = df.index
+    print("[TRADES] Price index sample:", price_index[:5])
 
-    # # map entry index → datetime
-    # if trades_df["entry_time"].isna().any(): # Check the entry_time column provided by records_dt
-    #     raise ValueError("Invalid entry_time detected after parsing")
+    trades_df["entry_time"] = price_index.to_series().iloc[
+        trades_df["entry_idx"]
+    ].values
+    trades_df["exit_time"] = price_index.to_series().iloc[
+        trades_df["exit_idx"]
+    ].values
 
+    print("[TRADES] Raw entry_time sample:",
+          trades_df["entry_time"].head(5).tolist())
 
+    trades_df["entry_time"] = pd.to_datetime(trades_df["entry_time"], utc=False)
+    trades_df["exit_time"] = pd.to_datetime(trades_df["exit_time"], utc=False)
 
-    # # -------- TIME SLICE -------- #
-    # time_slice_analysis = await run_time_slice_analysis(
-    #     trades_df=trades_df,
-    #     interval=interval,
-    #     start_date=start_date,
-    #     end_date=end_date
-    # )
+    print("[TRADES] entry_time dtype:", trades_df["entry_time"].dtype)
+    print("[TRADES] Parsed entry_time sample:",
+          trades_df["entry_time"].head(5).tolist())
+
+    print("[TRADES] Unique entry hours:",
+          trades_df["entry_time"].dt.hour.unique())
+    print("[TRADES] Unique entry weekdays:",
+          trades_df["entry_time"].dt.day_name().unique())
+
+    trades_df = trades_df.dropna(subset=["entry_time"])
+    print("[TRADES] Trades after dropna:", len(trades_df))
+
+    print("\n[TIME SLICE] Starting time-slice analysis...")
+    # ---------- TIME SLICE ----------
+    time_slice = await run_time_slice_analysis(
+        trades_df=trades_df,
+        interval=interval,
+        start_date=start_date,
+        end_date=end_date
+    )
+
+    print("[TIME SLICE] Completed")
+    print("========== BACKTEST END ==========\n")
 
     return {
-        "backtest_result": backtest_metrics,
-        # "time_slice_analysis": time_slice_analysis
+        "backtest_result": stats,
+        "time_slice_analysis": time_slice
     }

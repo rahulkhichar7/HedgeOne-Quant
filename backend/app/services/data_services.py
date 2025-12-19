@@ -62,7 +62,7 @@ async def _load_and_resample_data(ticker_name: str, resolution: str, start_date:
     # Ensure index is datetime and volume is integer
     df_resampled['volume'] = df_resampled['volume'].fillna(0).astype(int)
     
-    return df_resampled.reset_index(names=['date_time'])
+    return df_resampled
 
 
 
