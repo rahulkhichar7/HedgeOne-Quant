@@ -78,6 +78,8 @@ def get_data_by_DEI(symbol, resolution, start_date, end_date):
     final_df = final_df.drop_duplicates(subset='time')
     final_df['time'] = final_df['time'].apply(unix_to_dt)
     final_df = final_df.reset_index(drop=True)
+    final_df = final_df[["time",'open','high','low','close','volume']]
+    final_df.columns = ["date_time",'open','high','low','close','volume']
     
     print(f"Successfully fetched {len(final_df)} total candles.")
     return final_df
@@ -210,8 +212,8 @@ def get_historical_data_by_fyers(symbol, resolution, start_date, end_date):
 
     return df
 
-def save_to_csv(df:pd.DataFrame, symbol:str):
-    df["date_time"] = pd.to_datetime(df["date_time"]).dt.strftime("%d/%m/%Y %H:%M:%S")
-    path = PROJECT_PATH/"data"/f"{symbol}.csv"
+def save_to_csv(df:pd.DataFrame, address:str):
+    df["date_time"] = pd.to_datetime(df["date_time"], dayfirst = True, errors="raise").dt.strftime("%d/%m/%Y %H:%M:%S")
+    path = PROJECT_PATH/"data"/address
     df.to_csv(path, index=None)
     print(f"Successfully saved to {path}")

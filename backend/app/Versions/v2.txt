@@ -1,0 +1,8 @@
+Expand to min 10 strategy & 10 indicators.
+Add strategy combine feature.
+Explore VectorBT.
+Validate the backtesting and Time slice process Manually.
+Add parameter tunning feature
+Add mega strategy running (If a strategy is ready, I should be able to run it on all selected securities)
+A Option to save tested strategies with results & note.
+

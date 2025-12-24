@@ -9,7 +9,7 @@ router = APIRouter()
 
 @router.post("/backtest", response_model=Dict[str, Any])
 async def run_backtest(
-    ticker_name: str = Query("NIFTY 50"),
+    ticker_name: str = Query("TATA CONSULTANCY SERVICES"),
     start_date: str = Query("01/12/2024 09:15:00"),
     end_date: str = Query("10/04/2025 15:30:00"),
     interval: str = Query("15m"),
@@ -32,4 +32,5 @@ async def run_backtest(
         initial_cash=initial_cash,
         fees=fees,
         slippage=slippage,
+        df=None
     )

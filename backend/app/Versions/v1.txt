@@ -1,0 +1,5 @@
+Added 5 companies + 5 indexes (1 year data).
+1 strategy + 1 indicator + 20 sample strategy + 20 sample indicators added.
+run strategy + run indicator available (one at a time)
+Can see buy/sell on charts
+Can see compared performace across different time slices

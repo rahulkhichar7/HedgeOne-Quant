@@ -79,7 +79,7 @@ async def fetch_data_to_df(
         start_date,
         end_date
     )
-
+    df = df.reset_index().rename(columns={"index": "date_time"})
     df = df.astype("str")
     records = df.to_dict(orient="records")
     return {"data": records}

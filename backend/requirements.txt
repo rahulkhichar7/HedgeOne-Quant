@@ -12,3 +12,7 @@ matplotlib
 fyers_apiv3
 dotenv
 pydantic_settings
+
+#only for UI
+streamlit
+altair

@@ -109,35 +109,11 @@ def format_timedelta(td):
 
 # ================= MAIN ORCHESTRATOR ================= #
 
-async def run_full_backtest(
-    ticker_name: str,
-    start_date: str,
-    end_date: str,
-    interval: str,
-    strategy_name: str,
-    params: Dict[str, Any],
-    initial_cash: float,
-    fees: float,
-    slippage: float,
-    df:None,
-) -> Dict[str, Any]:
-
-    print("[BACKTEST] Starting")
+async def strategy_to_portfolio(df:pd.DataFrame, signals, initial_cash, fees, slippage, interval, start_date, end_date):
 
     fees /= 100
     slippage /= 100
-
-    # ---------- DATA ----------
-    print("[DATA] Loading")
-    if df is None:
-        df = await _load_and_resample_data(ticker_name, interval, start_date, end_date)
-
-    # ---------- STRATEGY ----------
-    print("[STRATEGY] Running")
-    strategy_fn = STRATEGY_REGISTRY[strategy_name]
-    signals = strategy_fn(df, **params)
-
-    # ---------- PORTFOLIO ----------
+        # ---------- PORTFOLIO ----------
     portfolio = await asyncio.to_thread(
         vbt.Portfolio.from_signals,
         close=df["close"],
@@ -187,23 +163,52 @@ async def run_full_backtest(
     trades_df["exit_time"] = pd.to_datetime(trades_df["exit_time"])
     trades_df = trades_df.dropna(subset=["entry_time"])
 
-# 🔍 DEBUG: find weekend trades
-    trades_df["weekday"] = trades_df["entry_time"].dt.day_name()
-    trades_df["date"] = trades_df["entry_time"].dt.date
+    return stats, trades_df
 
-    weekend_trades = trades_df[
-        trades_df["weekday"].isin(["Saturday", "Sunday"])
-    ]
+# # 🔍 DEBUG: find weekend trades
+#     trades_df["weekday"] = trades_df["entry_time"].dt.day_name()
+#     trades_df["date"] = trades_df["entry_time"].dt.date
 
-    if not weekend_trades.empty:
-        print("\n[DEBUG] Weekend trades detected:")
-        print(
-            weekend_trades[
-                ["entry_time", "exit_time", "weekday", "date", "return"]
-            ]
-        )
+#     weekend_trades = trades_df[
+#         trades_df["weekday"].isin(["Saturday", "Sunday"])
+#     ]
+
+#     if not weekend_trades.empty:
+#         print("\n[DEBUG] Weekend trades detected:")
+#         print(
+#             weekend_trades[
+#                 ["entry_time", "exit_time", "weekday", "date", "return"]
+#             ]
+#         )
 
 
+
+async def run_full_backtest(
+    ticker_name: str,
+    start_date: str,
+    end_date: str,
+    interval: str,
+    strategy_name: str,
+    params: Dict[str, Any],
+    initial_cash: float,
+    fees: float,
+    slippage: float,
+    df:None,
+) -> Dict[str, Any]:
+
+    print("[BACKTEST] Starting")
+
+    # ---------- DATA ----------
+    print("[DATA] Loading")
+    if df is None:
+        df = await _load_and_resample_data(ticker_name, interval, start_date, end_date)
+
+    # ---------- STRATEGY ----------
+    print("[STRATEGY] Running")
+    strategy_fn = STRATEGY_REGISTRY[strategy_name]
+    signals = strategy_fn(df, **params)
+
+    stats, trades_df = await strategy_to_portfolio(df, signals, initial_cash, fees, slippage, interval, start_date, end_date)
     # ---------- TIME SLICE ----------
     print("[TIME SLICE] Running")
     time_slice = await run_time_slice_analysis(

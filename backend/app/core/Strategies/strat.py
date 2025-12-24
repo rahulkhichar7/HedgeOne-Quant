@@ -10,11 +10,13 @@ def _result(entries, exits, indicators):
 
 def ema_crossover(df, short_window, long_window):
     close = df["close"]
-    fast = vbt.MA.run(close, window=short_window, ewm=True).ma
-    slow = vbt.MA.run(close, window=long_window, ewm=True).ma
+    fast = vbt.MA.run(close, window=short_window).ma
+    slow = vbt.MA.run(close, window=long_window).ma
     return _result(
-        (fast > slow) & (fast.shift() <= slow.shift()),
-        (fast < slow) & (fast.shift() >= slow.shift()),
+        (fast >= slow) & (fast.shift() < slow.shift()),
+        (fast <= slow) & (fast.shift() > slow.shift()),
+        # fast.ma_crossed_above(slow),
+        # slow.ma_crossed_below(fast),
         {"ema_fast": fast, "ema_slow": slow}
     )
 

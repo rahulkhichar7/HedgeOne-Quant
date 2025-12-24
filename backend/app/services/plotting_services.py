@@ -25,7 +25,6 @@ class TimeSlicePlotter:
         }
         """
         self.data = time_slice_result
-
     # ================= INTERNAL HELPERS ================= #
 
     def _validate_unit(self, unit_name: str):

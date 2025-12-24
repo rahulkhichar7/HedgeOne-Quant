@@ -45,7 +45,7 @@ async def _get_indicators_metadata():
     )
 )
 async def run_indicator(
-    ticker_name: str = Query(default="NIFTY 50", description="Trading symbol or index name"),
+    ticker_name: str = Query(default="TATA CONSULTANCY SERVICES", description="Trading symbol or index name"),
     start_date: str = Query(default="01/12/2024 09:15:00", description="Start datetime (DD/MM/YYYY HH:MM:SS)"),
     end_date: str = Query(default="06/12/2024 15:30:00", description="End datetime (DD/MM/YYYY HH:MM:SS)"),
     interval: str = Query(default="1d", description="Candle interval (e.g. '5m', '15m', '1h', '1d')"),
@@ -92,7 +92,7 @@ async def _get_strategies_metadata():
         )
 )
 async def run_strategy(
-    ticker_name: str = Query(default="NIFTY 50", description="Trading symbol or index name (e.g. 'NIFTY 50', 'RELIANCE')"),
+    ticker_name: str = Query(default="TATA CONSULTANCY SERVICES", description="Trading symbol or index name (e.g. 'NIFTY 50', 'RELIANCE')"),
     start_date: str = Query(default="01/12/2024 09:15:00", description="Start datetime in format DD/MM/YYYY HH:MM:SS"),
     end_date: str = Query(default="06/12/2024 15:30:00", description="End datetime in format DD/MM/YYYY HH:MM:SS"),
     interval: str = Query(default="1d", description="Candle interval (e.g. '5m', '15m', '1h', '1d')"),
@@ -124,7 +124,7 @@ async def run_strategy(
 
 @router.post("/cache/load")
 async def load_data(
-    ticker_name: str = Query('NIFTY 50', description="e.g. 'NIFTY 50'")
+    ticker_name: str = Query("TATA CONSULTANCY SERVICES", description="e.g. 'NIFTY 50'")
 ):
     df = await _read_csv(ticker_name=ticker_name)
     return await set_data(df=df, ticker= ticker_name)
@@ -136,13 +136,13 @@ async def cache_keys():
 
 @router.post("/cache/delete")
 async def clear_cache(
-    ticker_name: str = Query('NIFTY 50', description="e.g. 'NIFTY 50'")
+    ticker_name: str = Query("TATA CONSULTANCY SERVICES", description="e.g. 'NIFTY 50'")
 ):
     return await delete_data(ticker=ticker_name)
 
 @router.get("/data")
 async def get_ohlcv_data(
-    ticker_name: str = Query('NIFTY 50', description="e.g. 'NIFTY 50'"),
+    ticker_name: str = Query("TATA CONSULTANCY SERVICES", description="e.g. 'NIFTY 50'"),
     start_date: str = Query('01/12/2024 09:15:00', description="e.g. '01/12/2024 09:15:00'"),
     end_date: str = Query('06/12/2024 15:30:00', description="e.g. '01/10/2025 15:30:00'"),
     interval: str = Query('1d', description="e.g. '15m', '1d'")
