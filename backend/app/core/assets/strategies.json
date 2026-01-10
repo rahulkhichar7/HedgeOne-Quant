@@ -6,7 +6,7 @@
             { "name": "short_window", "type": "int", "default": 12 },
             { "name": "long_window", "type": "int", "default": 26 }
         ]
-    },
+    }, 
 
     "SMA Crossover": {
         "object": "sma_crossover",
@@ -14,7 +14,7 @@
         "inputs": [
             { "name": "short_window", "type": "int", "default": 20 },
             { "name": "long_window", "type": "int", "default": 50 }
-        ]
+        ] 
     },
 
     "RSI": {

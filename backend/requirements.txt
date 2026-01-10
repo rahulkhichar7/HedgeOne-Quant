@@ -14,5 +14,11 @@ dotenv
 pydantic_settings
 
 #only for UI
-streamlit
-altair
+# streamlit
+# altair
+# rapidfuzz
+# apscheduler 
+# sqlalchemy
+# finplot
+# vegafusion
+# lightweight-charts

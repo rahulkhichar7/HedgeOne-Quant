@@ -1,0 +1,6 @@
+replay mode for backtesting.
+replay mode for trade practice.(Difficuilt)
+Backtest report generator, export option + get report on email.
+Market news extractor (show + telegram bot + email)
+Add Opstra clone + Option Strategies
+Start Reading Quant Papers

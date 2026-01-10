@@ -10,8 +10,8 @@ def _result(entries, exits, indicators):
 
 def ema_crossover(df, short_window, long_window):
     close = df["close"]
-    fast = vbt.MA.run(close, window=short_window).ma
-    slow = vbt.MA.run(close, window=long_window).ma
+    fast = vbt.MA.run(close, window=short_window, ewm=True).ma
+    slow = vbt.MA.run(close, window=long_window, ewm=True).ma
     return _result(
         (fast >= slow) & (fast.shift() < slow.shift()),
         (fast <= slow) & (fast.shift() > slow.shift()),
@@ -24,7 +24,10 @@ def sma_crossover(df, short_window, long_window):
     close = df["close"]
     fast = vbt.MA.run(close, window=short_window).ma
     slow = vbt.MA.run(close, window=long_window).ma
-    return _result(fast > slow, fast < slow, {"sma_fast": fast, "sma_slow": slow})
+    return _result(
+        (fast >= slow) & (fast.shift() < slow.shift()),
+        (fast <= slow) & (fast.shift() > slow.shift()),
+          {"sma_fast": fast, "sma_slow": slow})
 
 def rsi_strategy(df, window, oversold, overbought):
     rsi = vbt.RSI.run(df["close"], window).rsi
