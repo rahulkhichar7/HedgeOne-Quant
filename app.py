@@ -146,17 +146,27 @@ if st.session_state.chart_data is not None:
     st.altair_chart(chart.properties(width=1000, height=400), use_container_width=True)
 
 # --- BACKTEST VISUALIZATION [cite: 50-86] ---
+# --- BACKTEST VISUALIZATION ---
 if 'backtest_results' in st.session_state:
     st.divider()
     res = st.session_state.backtest_results
     stats = res.get("backtest_result", {})
     
-    # Metrics [cite: 77-82]
+    # Helper function to safely round values
+    def fmt(val):
+        try:
+            return f"{float(val):.2f}"
+        except (ValueError, TypeError):
+            return "0.00"
+
+    # Metrics Layout
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Win Rate", f"{stats.get('Win Rate [%]', 0)}%")
-    m2.metric("Total Return", f"{stats.get('Total Return [%]', 0)}%")
-    m3.metric("Trades", stats.get("Total Trades", 0))
-    m4.metric("Max Drawdown", f"{stats.get('Max Drawdown [%]', 0)}%")
+    
+    # Display rounded metrics
+    m1.metric("Win Rate", f"{fmt(stats.get('Win Rate [%]', 0))}%")
+    m2.metric("Total Return", f"{fmt(stats.get('Total Return [%]', 0))}%")
+    m3.metric("Trades", int(stats.get("Total Trades", 0)))
+    m4.metric("Max Drawdown", f"{fmt(stats.get('Max Drawdown [%]', 0))}%")
 
     # Time Slice Analysis [cite: 54-68, 70-76]
     ts_analysis = res.get("time_slice_analysis", {})

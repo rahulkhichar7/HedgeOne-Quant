@@ -1,1 +1,0 @@
-// Type-safe fetch/API client for FastAPI calls

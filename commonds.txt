@@ -1,2 +1,10 @@
 remove a file from git: git rm --cached file_directory
 uvicorn backend.app.main:app --reload
+
+
+Findings
+strategies with good sharpe & P&L has low win rate (big +ve moves + capped losses), So trying to maximize win rate is not a good strategy
+strategies with good win rate are usually strategies of low profit moves only.
+print_df(df[df.Return>50]): Sharpe: (3.92, 3.58, 3.79), WR: (34.4, 33.21, 33.79), Return: (53.84, 50.01, 52.12)
+print_df(df[df.WinRate>30]): Sharpe: (3.92, -3.51, -0.38), WR: (66.38, 30.01, 39.79), Return: (53.84, -30.69, -3.51)
+Also varified by graph
