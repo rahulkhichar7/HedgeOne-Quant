@@ -1,1 +1,0 @@
-// Shared TypeScript interfaces (mirrored from Pydantic schemas)
