@@ -1,8 +1,13 @@
 venv/
 env/
-
-.env
 .venv
+.env
+__pycache__/
+*.pyc
 
+# market data, reports, broker tokens (all under data/)
+data/
 *.csv
+*.parquet
+*.pkl
 *.log
