@@ -1,11 +1,43 @@
+"""
+HedgeOne Quant — FastAPI application.
+
+Run (from the backend/ folder):   python run.py      → http://127.0.0.1:8000
+API docs:                          http://127.0.0.1:8000/docs
+"""
+from __future__ import annotations
+
+import sys
+
 from fastapi import FastAPI
-from backend.app.api.v1.data import router as data_router
-from backend.app.api.v1.backtest import router as backtest_router
-from backend.app.api.v1.user import router as user_router
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.staticfiles import StaticFiles
 
-app = FastAPI(title="HedgeOne Quant API")
+from . import config
+from .api import data, engine
 
-# Register all routers
-app.include_router(data_router, prefix="/api/v1/data")
-app.include_router(backtest_router, prefix="/api/v1/backtest")
-app.include_router(user_router, prefix="")
+# make `import strategies` work regardless of the working directory
+if str(config.BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(config.BACKEND_DIR))
+
+import strategies  # noqa: E402
+
+strategies.load_all()
+
+app = FastAPI(title="HedgeOne Quant API", version="2.0")
+app.add_middleware(GZipMiddleware, minimum_size=2048)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+app.include_router(data.router)
+app.include_router(engine.router)
+
+
+@app.get("/api/health")
+def health():
+    from .engine import INDICATORS, STRATEGIES
+    return {"ok": True, "strategies": len(STRATEGIES), "indicators": len(INDICATORS),
+            "strategy_errors": strategies.LOAD_ERRORS}
+
+
+# The UI (index.html, report.html, js/, css/) is served from /frontend
+app.mount("/", StaticFiles(directory=config.FRONTEND_DIR, html=True), name="frontend")

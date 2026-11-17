@@ -1,24 +1,18 @@
-fastapi
-uvicorn
-vectorbt
-pandas
-pydantic
-plotly
-requests
-anywidget
-nbformat
-pandas
-matplotlib
-fyers_apiv3
-dotenv
-pydantic_settings
+# HedgeOne Quant — backend requirements   (Python 3.11 – 3.14)
+# install:  pip install -r requirements.txt
 
-#only for UI
-# streamlit
-# altair
-# rapidfuzz
-# apscheduler 
-# sqlalchemy
-# finplot
-# vegafusion
-# lightweight-charts
+# --- backtesting / numerics (open-source vectorbt 1.x; pulls numba, scipy, plotly ...)
+vectorbt>=1.2.0
+pandas>=3.0.3
+numpy>=2.4.6
+
+# --- API server
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+
+# --- data
+pyarrow>=17          # Parquet candle store
+requests>=2.31       # Delta Exchange India + CoinDCX REST
+fyers-apiv3>=3.1     # Fyers historical data
+python-dotenv>=1.0   # backend/.env secrets
