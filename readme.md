@@ -1,705 +1,371 @@
-# HedgeOne-Quant
+# HedgeOne Quant
 
-> A quantitative research and algorithmic trading platform for market data analysis, technical indicators, strategy development, and historical backtesting.
+A local quant research terminal. It downloads market data from **Fyers**, **Delta Exchange India** and **CoinDCX**
+and stores it on your disk. You write strategies in **plain Python** in VS Code, then apply them to a
+**TradingView-style chart** where every trade is shaded green or red. One click backtests the strategy on **vectorbt**
+(open-source, 1.2+), and **Deep backtest** produces a full report page you can save as a PDF.
 
----
-
-## Overview
-
-**HedgeOne-Quant** is a quantitative trading research platform designed to provide a structured environment for exploring financial market data, developing systematic trading strategies, computing technical indicators, and evaluating strategy performance through historical backtesting.
-
-The project is built around a modular architecture that separates:
-
-- Market data acquisition and processing
-- Data caching and management
-- Technical indicators
-- Trading strategies
-- Backtesting
-- Plotting and visualization
-- API services
-- Research and experimentation
-
-The core backend is implemented using **FastAPI**, while quantitative analysis and strategy research make extensive use of **Pandas, NumPy, VectorBT, Matplotlib, and Plotly**.
-
-The API exposes dedicated routes for data, backtesting, user functionality, indicators, strategies, and cached datasets. The application entry point registers the major API routers under `/api/v1/data` and `/api/v1/backtest`. :contentReference[oaicite:1]{index=1}
-
----
-
-## Key Objectives
-
-HedgeOne-Quant aims to provide a foundation for systematic quantitative research with an emphasis on:
-
-- 📊 Historical market-data analysis
-- 📈 Technical indicator research
-- 🧠 Rule-based trading strategy development
-- 🔬 Strategy experimentation
-- ⚙️ Automated backtesting
-- 📉 Performance evaluation
-- 🗃️ Efficient historical-data handling
-- 🚀 API-driven quantitative workflows
-- 🧪 Research through interactive notebooks
-
----
-
-## Features
-
-### 1. Market Data Management
-
-The platform works with historical **OHLCV (Open, High, Low, Close, Volume)** market data.
-
-A typical data record contains:
-
-```text
-date_time
-open
-high
-low
-close
-volume
-````
-
-The backend defines structured data-transfer models for OHLCV data using Pydantic. 
-
-The system supports configurable:
-
-* Tickers
-* Start dates
-* End dates
-* Candle intervals
-* Historical datasets
-* Data resampling
-
-Supported research intervals include examples such as:
-
-```text
-5m
-15m
-1h
-1d
+```
+ ┌───────────────────────────────── browser: http://127.0.0.1:8000 ─────────────────────────────────┐
+ │  symbol · interval · dates                                                          ⬇ Data   ⇆   │
+ │ ┌──────────────────────────────────────────────────────────────┐ ┌─────────────────────────────┐ │
+ │ │ candles + strategy lines                                     │ │ Strategy | Indicators |     │ │
+ │ │ ░░ green zone = winning trade   ▓▓ red zone = losing trade   │ │ Results | Trades | Reports  │ │
+ │ │ RSI / MACD panes …                                           │ │  params · settings          │ │
+ │ │ Equity vs buy & hold                                         │ │  ▶ Apply  Backtest  Deep ↗  │ │
+ │ │ Drawdown                                                     │ │                             │ │
+ │ └──────────────────────────────────────────────────────────────┘ └─────────────────────────────┘ │
+ └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### 2. Multiple Asset Classes
+## 1. Quick start (Windows)
 
-The project contains mappings for a range of financial instruments, including:
-
-* Indian equities
-* Indian market indices
-* Cryptocurrency pairs
-
-Examples include:
-
-```text
-NIFTY 50
-NIFTY BANK
-NIFTY IT
-NIFTY MIDCAP 100
-NIFTY FMCG
-
-TATA CONSULTANCY SERVICES
-RELIANCE INDUSTRIES LTD
-INFOSYS LIMITED
-HINDUSTAN UNILEVER LTD
-
-BTCUSD
-ETHUSD
-SOLUSD
-XRPUSD
-LTCUSD
-```
-
-This allows the same research infrastructure to be applied across different instruments and markets. 
-
----
-
-## 3. Technical Indicators
-
-HedgeOne-Quant provides a registry-based architecture for technical indicators.
-
-Indicators can be:
-
-1. Registered in the indicator registry
-2. Selected through the API
-3. Configured using parameters
-4. Executed against historical OHLCV data
-5. Returned as structured indicator values
-
-The API provides indicator discovery and metadata endpoints as well as an endpoint for executing an indicator on historical data. 
-
-Example parameter format:
-
-```json
-{
-  "window": 14
-}
-```
-
-This architecture makes it possible to extend the platform with additional indicators without redesigning the entire API.
-
----
-
-## 4. Trading Strategies
-
-Trading strategies follow a similar registry-based architecture.
-
-Strategies can receive:
-
-* Historical OHLCV data
-* Configurable parameters
-* Selected time intervals
-* Selected instruments
-* Historical date ranges
-
-A strategy returns information such as:
-
-```text
-entries
-exits
-indicators
-```
-
-The backend exposes strategy discovery, strategy metadata, and strategy execution functionality. 
-
-This provides a flexible foundation for implementing strategies such as:
-
-* Moving-average strategies
-* Momentum strategies
-* Mean-reversion strategies
-* Indicator-based strategies
-* Multi-condition strategies
-* Custom quantitative research strategies
-
----
-
-## 5. Historical Backtesting
-
-The project integrates **VectorBT** for quantitative strategy research and backtesting.
-
-A research example uses:
-
-```python
-import vectorbt as vbt
-```
-
-and constructs a portfolio from generated entry and exit signals.
-
-Example:
-
-```python
-portfolio = vbt.Portfolio.from_signals(
-    close=price,
-    entries=entries,
-    exits=exits,
-    init_cash=100000,
-    fees=0.0,
-    slippage=0.0,
-    freq=resolution
-)
-```
-
-The research workflow evaluates strategy characteristics such as:
-
-* Total return
-* Win rate
-* Sharpe ratio
-* Entry signals
-* Exit signals
-* Parameter combinations
-* Stop-loss configurations
-* Take-profit configurations
-* Trailing-stop configurations
-* ATR-based configurations
-
-The included research notebook demonstrates experimentation with historical TCS data and strategy parameter sweeps.
-
----
-
-## 6. Data Resampling
-
-Historical datasets can be loaded and resampled according to the requested research resolution.
-
-For example:
-
-```text
-5m
-15m
-1h
-1d
-```
-
-A typical workflow is:
-
-```text
-Raw Historical Data
-        │
-        ▼
-Data Loading
-        │
-        ▼
-Date Filtering
-        │
-        ▼
-Resampling
-        │
-        ▼
-OHLCV DataFrame
-        │
-        ▼
-Indicator / Strategy
-        │
-        ▼
-Backtest
-```
-
-The data service provides functions for loading and resampling historical datasets before they are passed to indicators or strategies. 
-
----
-
-## 7. Data Caching
-
-HedgeOne-Quant includes a caching layer for loaded market datasets.
-
-The API provides operations to:
-
-* Load data into cache
-* Retrieve cached keys
-* Delete cached datasets
-
-Example cache keys follow the pattern:
-
-```text
-data:TATA CONSULTANCY SERVICES
-data:RELIANCE INDUSTRIES LTD
-```
-
-The cache API is designed to reduce repeated data-loading operations during research and strategy execution. 
-
----
-
-## 8. Fyers Integration
-
-The project includes utilities for obtaining historical market data through **Fyers**.
-
-The data utilities expose functionality related to:
-
-```python
-get_fyers_authcode()
-get_historical_data_by_fyers()
-save_to_csv()
-```
-
-This provides a path for acquiring and maintaining historical market datasets for quantitative research.
-
----
-
-## Architecture
-
-HedgeOne-Quant follows a modular backend architecture:
-
-```text
-HedgeOne-Quant
-│
-├── backend/
-│   │
-│   ├── app/
-│   │   ├── api/
-│   │   │   └── v1/
-│   │   │       ├── data
-│   │   │       ├── backtest
-│   │   │       └── user
-│   │   │
-│   │   ├── core/
-│   │   │   ├── Strategies
-│   │   │   └── Indicators
-│   │   │
-│   │   ├── services/
-│   │   │   ├── data_services
-│   │   │   ├── cache_service
-│   │   │   ├── plotting_services
-│   │   │   └── backtest_services
-│   │   │
-│   │   ├── schemas/
-│   │   │   └── data_models
-│   │   │
-│   │   ├── utils/
-│   │   │   └── data utilities
-│   │   │
-│   │   └── assets/
-│   │
-│   ├── main.py
-│   ├── requirements.txt
-│   └── start.sh
-│
-├── St_dev1.ipynb
-│
-└── README.md
-```
-
-The backend entry point creates a FastAPI application named:
-
-```text
-HedgeOne Quant API
-```
-
-and registers separate routers for data, backtesting, and user-related functionality. 
-
----
-
-# Technology Stack
-
-## Backend
-
-| Technology        | Purpose                         |
-| ----------------- | ------------------------------- |
-| Python            | Core programming language       |
-| FastAPI           | REST API framework              |
-| Uvicorn           | ASGI application server         |
-| Pydantic          | Data validation and API schemas |
-| Pydantic Settings | Application configuration       |
-| Pandas            | Data manipulation and analysis  |
-| NumPy             | Numerical computation           |
-
-## Quantitative Research
-
-| Technology       | Purpose                           |
-| ---------------- | --------------------------------- |
-| VectorBT         | Strategy research and backtesting |
-| Matplotlib       | Research visualization            |
-| Plotly           | Interactive visualization         |
-| Jupyter Notebook | Quantitative experimentation      |
-
-
----
-
-# Installation
-
-## 1. Clone the Repository
-
-```bash
-git clone <repository-url>
-cd HedgeOne-Quant
-```
-
----
-
-## 2. Create a Virtual Environment
-
-### Windows
-
-```bash
+```bat
+cd HedgeOne-Quant\backend
 python -m venv .venv
 .venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env          &:: then put your Fyers keys in .env
+python run.py
 ```
 
-### Linux / macOS
+Open **http://127.0.0.1:8000**. The API docs are at http://127.0.0.1:8000/docs.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
+> You need Python **3.11 or newer** (vectorbt 1.2 requires it). The first backtest after a restart takes a few
+> seconds because numba compiles vectorbt's engine; after that it's fast.
+
+**First run:**
+1. Click **⬇ Data**, pick a symbol (e.g. `BTCUSD`, which uses Delta Exchange and needs no key), choose `5m`
+   and a date range, then click **Start download**.
+2. For NSE symbols, open **Fyers login** in the same dialog once a day, log in, and paste the redirect URL.
+3. Already have your old HedgeOne CSVs? Use **Import CSV** and give it the file path (the old
+   `date_time,open,high,low,close,volume` format works as-is).
+4. Pick a strategy on the right and press **Apply**, **Backtest** or **Deep backtest ↗**.
 
 ---
 
-## 3. Install Dependencies
+## 2. Folder structure
 
-Navigate to the backend directory if required:
+```
+HedgeOne-Quant/
+├── backend/
+│   ├── run.py                  ← start the server (auto-reloads when you edit code)
+│   ├── cli.py                  ← same features from the terminal (download, backtest, deep …)
+│   ├── requirements.txt
+│   ├── .env.example            ← copy to .env (Fyers keys)
+│   ├── strategies/             ← ★ YOUR STRATEGIES — every .py here is auto-loaded
+│   │   ├── __init__.py         (auto-discovery + hot reload)
+│   │   ├── trend.py            10 trend strategies
+│   │   ├── mean_reversion.py   7 mean-reversion strategies
+│   │   ├── momentum.py         6 momentum strategies
+│   │   ├── breakout.py         6 breakout / volatility strategies
+│   │   ├── intraday.py         4 intraday strategies (ORB, VWAP, PDH/PDL)
+│   │   └── my_strategies.py    template + example with a daily filter + custom indicator
+│   └── app/
+│       ├── main.py             FastAPI app, serves the frontend
+│       ├── config.py           paths, .env, markets (NSE / CRYPTO), cost presets, backtest defaults
+│       ├── api/
+│       │   ├── common.py       NaN-safe JSON, error mapping
+│       │   ├── data.py         /api/symbols, /download, /candles, /import-csv, /fyers/…
+│       │   └── engine.py       /api/strategies, /indicators, /apply, /backtest, /deep, /reports
+│       ├── data/
+│       │   ├── sources.py      Fyers · Delta Exchange India · CoinDCX · CSV  (one class each)
+│       │   ├── store.py        Parquet store, merge/update, session-aligned resampling, jobs
+│       │   └── symbols.json    symbol catalog (edit or add from the UI)
+│       └── engine/
+│           ├── __init__.py     the toolkit you import in strategies
+│           ├── base.py         @strategy, @indicator, Param, Signals, crossover, htf(), …
+│           ├── indicators.py   39 indicators (TradingView formulas) — also usable as ta.*
+│           ├── backtest.py     vectorbt simulation, costs, fills, stops, metrics
+│           ├── analysis.py     deep analysis, insights, report storage
+│           ├── replay.py       bar replay: look-ahead check + exact point-in-time mode
+│           └── runner.py       run(symbol, interval, …, mode) — used by API and CLI
+├── frontend/                   plain HTML / CSS / JS (no build step)
+│   ├── index.html              the terminal
+│   ├── report.html             the report page (Download PDF)
+│   ├── css/style.css · css/report.css
+│   ├── js/app.js               terminal controller
+│   ├── js/chart.js             chart stack, trade-zone drawing, synced panes, legend
+│   ├── js/replay.js            bar replay controller (playback, intrabar, practice trading)
+│   ├── js/report.js · js/svg.js  report page + small SVG charts
+│   ├── js/api.js · js/ui.js    fetch wrapper, shared formatting
+│   └── vendor/lightweight-charts.standalone.js   (TradingView Lightweight Charts v4.1, Apache-2.0)
+├── data/                       (git-ignored, created automatically)
+│   ├── store/<source>/<SYMBOL>__<interval>.parquet
+│   ├── reports/<id>.json
+│   └── tokens/fyers_token.json
+├── docs/versions/              your old version notes (v1–v4)
+└── Arbitrage/                  untouched
+```
+
+**Where to put new code:**
+
+| You want to… | Edit |
+|---|---|
+| add or modify a strategy | `backend/strategies/*.py` (any new file works), then click ⟳ in the UI |
+| add an indicator to the chart list | `@indicator` in `app/engine/indicators.py` or in any strategy file |
+| add a symbol | UI → Data → Add symbol, or `app/data/symbols.json` |
+| add a data source (e.g. Zerodha) | subclass `DataSource` in `app/data/sources.py`, register it in `SOURCES` |
+| change fees / slippage / trading calendar | `app/config.py` (`COST_PRESETS`, `MARKETS`) |
+| add a metric | `metrics()` in `app/engine/backtest.py` (it appears in the UI automatically) |
+| add an analysis / insight | `app/engine/analysis.py` (`breakdowns()`, `insights()`) |
+| change the UI | `frontend/js/app.js`, `frontend/css/style.css` |
+
+---
+
+## 3. Writing a strategy (raw Python)
+
+```python
+# backend/strategies/my_strategies.py
+from app.engine import strategy, Param, Signals, ta, crossover, crossunder
+
+@strategy("My EMA Cross", "My Strategies",
+          fast=Param(9, 2, 100, help="fast EMA"),
+          slow=Param(21, 3, 300))
+def my_ema_cross(df, fast, slow):
+    f = ta.ema(df.close, fast)
+    s = ta.ema(df.close, slow)
+    return Signals(
+        entries=crossover(f, s),          # buy when the fast line crosses above
+        exits=crossunder(f, s),           # sell on the cross back
+        overlays={"EMA fast": f, "EMA slow": s},   # drawn on the chart
+    )
+```
+
+Save the file and click **⟳** next to the strategy search box. It shows up in the library, the parameter form is
+built from your `Param`s, and **Apply** draws the lines, buy/sell markers and green/red trade zones.
+
+**What you get inside a strategy**
+
+| | |
+|---|---|
+| `df` | pandas DataFrame: `open, high, low, close, volume`, DatetimeIndex in IST, at the timeframe selected in the UI |
+| `ta.*` | `sma ema wma hma dema tema rma vwma rsi macd stoch stoch_rsi cci willr roc mom mfi trix awesome ultimate aroon atr adx bbands keltner donchian supertrend psar ichimoku vwap obv ad_line cmf zscore stdev hist_vol pivots_daily` |
+| signals | `crossover(a, b)`, `crossunder`, `cross`, `rising(s, n)`, `falling`, `highest(s, n)`, `lowest`, `bars_since(cond)`, `state_to_events(cond)` |
+| time | `between_time(df, "09:30", "14:45")`, `first_bar_of_day(df)`, `last_bar_of_day(df)` |
+| multi-timeframe | `htf(df, "1d", lambda d: ta.ema(d.close, 20))`: higher-timeframe value with **no look-ahead** |
+| other symbols | `load("NIFTY 50", "1d")` (e.g. for a market filter or a pairs trade) |
+
+**`Signals(...)` fields**
+
+| field | meaning |
+|---|---|
+| `entries`, `exits` | long entry / exit (boolean Series) |
+| `short_entries`, `short_exits` | optional short side (long↔short reversal is supported) |
+| `overlays={name: series}` | lines on the price chart |
+| `panes={"RSI": {"RSI": rsi}}` | separate synced panes under the chart |
+| `levels={"RSI": [30, 70]}` | dashed guide lines in a pane |
+| `sl=1.5, tp=4, trailing=True` | stop-loss / take-profit in **percent**, simulated intrabar by vectorbt using high/low |
+
+A strategy file that fails to import doesn't crash the app. The UI shows the traceback above the strategy list.
+
+---
+
+## 4. The three buttons
+
+| Button | What happens | Where you see it |
+|---|---|---|
+| **▶ Apply** | runs the strategy and simulates the trades | strategy lines and panes, Buy/Short markers, exit dots with %, **dim green / red zone across every trade** plus a box from entry price to exit price. Hover a zone to see entry, exit, P&L, MAE/MFE and exit reason. "Raw signals" toggle shows every signal bar vs the actual fills. |
+| **Backtest** | Apply + full metrics | **Results** tab (KPIs + 37 metrics), **Equity vs buy & hold** pane, **Drawdown** pane, **Trades** tab (sortable; click a row to zoom to the trade) |
+| **Deep backtest ↗** | Backtest + full analysis, saved as a report | a link to `report.html?id=…` (also listed in **Reports**). The page has the price chart with trade zones, equity and drawdown, an insights section ("where it works / fails"), all metrics, a monthly returns heatmap, yearly vs buy & hold, breakdowns by **time of day, hour, weekday, week of month, month, year, holding period, side and exit reason**, return distribution, MAE/MFE scatter, holding time vs result, rolling win rate, cumulative P&L, worst drawdowns, the full trade list and the strategy source. **Download PDF** prints it (A4 landscape, light theme); choose "Save as PDF". |
+
+**Insights** are plain-English findings generated from the trades, for example:
+- *Weak hour (entry): 12:00. 6 trades, win rate 33%, P&L −1.45% of capital. Consider filtering out this hour.*
+- *Winners turning into losers. 14 of 23 losing trades were up at least 0.48% before closing red. A trailing stop could save these.*
+- *Stop-loss hint. 90% of winning trades never went more than 0.88% against you.*
+- *Losers held too long*, *Costs eat the edge*, *The short side loses*, *Profit concentration*, *Small sample*, *Too good to be true?*
+
+---
+
+## 4b. Bar Replay ⏪
+
+Replay the market from any point, bar by bar, like TradingView's replay but stricter about the future.
+
+**Start:** click **⏪ Replay** in the chart toolbar, then click the candle to start from (everything to its right is
+hidden). You can also pick a date or press 🎲 for a random bar.
+
+| Control | |
+|---|---|
+| ▶ / ⏸ | play / pause (**Space**) |
+| ⏴ ⏵ | step back / forward one bar (**← / →**, **Shift+→** = 10 bars) |
+| speed | 0.5 – 100 steps per second |
+| **Bar / Intrabar** | *Intrabar* builds each candle from your finer stored data (e.g. a 15m candle grows minute by minute: open → highs/lows → close, volume accumulating). It's available when you've stored a finer interval than the chart's. |
+| Pause on trade | stops automatically whenever the strategy opens or closes a trade |
+| slider | scrub to any bar |
+| ⤺ | pick a new start bar |
+| ✕ | exit (**Esc**) |
+| **Practice: Buy / Sell / Close** | trade by hand at the current price (**B / S / C**). Your trades are drawn with a blue outline and tracked with P&L (fees from your cost preset). |
+
+Everything works during replay: pick any strategy and press **Apply**, or add, edit and remove indicators. The
+replay reloads and keeps your position in time. **Backtest** and **Deep backtest** in replay mode only use data
+**up to the replay cursor**, and the Results tab says so.
+
+**How the future stays hidden:**
+1. The chart, legend, indicator values, panes, equity curve, markers and the trade list are cut at the cursor, so no
+   future value is ever drawn, not even in the crosshair legend.
+2. A trade appears only once it would have been known. Fills at a bar's open show when that bar opens, and
+   stop-loss / take-profit exits show when the bar closes. A still-open trade is drawn up to the cursor with its
+   live P&L.
+3. **Look-ahead check.** When replay starts, the backend reruns the strategy and every indicator with the future cut
+   off at several points and compares signals, plotted lines and the simulated equity. The badge shows
+   **✓ past data only** when it all matches. All 34 built-in strategies and 39 indicators pass.
+4. If your own code peeks ahead (`shift(-1)`, normalising by the whole series' mean or max, `df.close.iloc[-1]` …), the
+   badge turns **⚠ exact mode** and a message names the series and bar where it happened. In exact mode the strategy
+   **goes live at the replay start**: for every new bar it's run only on the bars so far, and its decision for that bar
+   is frozen. You see exactly what it would have done live, which is usually much worse than its backtest.
+
+API: `POST /api/replay/prepare` (data + look-ahead check), `POST /api/replay/step` (exact point-in-time mode).
+
+---
+
+## 5. How the backtest stays realistic
+
+| Topic | What HedgeOne does |
+|---|---|
+| **Fills** | Signals are computed on the bar **close** and filled at the **next bar's open** (no look-ahead). You can switch to same-bar-close in Backtest settings. |
+| **Costs** | Per-side fees and slippage from a market preset (`config.COST_PRESETS`): NSE intraday / delivery / futures, Delta futures, CoinDCX spot, or zero. You can override any number in the UI. *Presets are approximations; check them against your broker's current charges.* |
+| **Annualisation** | Sharpe, Sortino, CAGR and volatility use the **real trading calendar**: NSE = 252 days × session bars (09:15–15:30), crypto = 365 × 24h. The old code assumed 24/7 trading and inflated intraday Sharpe by about 2.4×. |
+| **Resampling** | NSE intraday bars are anchored at **09:15** (1h = 09:15, 10:15 … like TradingView). Crypto bars align to UTC like the exchanges. Weekly bars start on Monday. |
+| **Intraday square-off** | Optional: flat at 15:15, no new entries after 15:00, never holds overnight. "Last bar of the day" is decided by the clock (bar end ≥ 15:30), never by peeking at the next bar. |
+| **Stops** | SL / TP / trailing are simulated by vectorbt using each bar's high and low. |
+| **Exit reason** | Every trade is tagged *Signal / Stop loss / Take profit / Trailing stop / Square-off / Reversal / Open*. |
+| **MAE / MFE** | Max adverse / favourable excursion for each trade, from the bar highs and lows while the trade was open. |
+| **Indicators** | Same formulas as TradingView's Pine built-ins (EMA/RMA seeded with an SMA, Wilder RSI/ATR/ADX, population stdev in Bollinger Bands), so values match the TradingView chart. |
+
+---
+
+## 6. Data sources
+
+| Source | Markets | Auth | Intervals | Notes |
+|---|---|---|---|---|
+| **Fyers** (API v3) | NSE stocks, indices, F&O | `FYERS_CLIENT_ID`, `FYERS_SECRET_KEY` in `.env` + daily login | 1m … 4h, 1d | 100-day chunks intraday, 366 days daily; token saved in `data/tokens/` |
+| **Delta Exchange India** | crypto futures (BTCUSD, ETHUSD …) | none | 1m … 1w | `api.india.delta.exchange/v2/history/candles`, 2,000 candles/request |
+| **CoinDCX** | crypto spot (`B-BTC_USDT`, `I-BTC_INR` …) | none | 1m … 1M | `public.coindcx.com/market_data/candles`, 1,000 candles/request |
+| **CSV** | anything | none | any | `date_time, open, high, low, close, volume` (DD/MM/YYYY or ISO or epoch) |
+
+- All timestamps are stored as **naive IST** (`HEDGEONE_TZ`), so the chart shows Indian wall-clock time.
+- Download the **finest** interval you need once (e.g. `1m` or `5m`). The app builds every higher timeframe from it.
+- Downloading again **merges** into the stored file. **Data → Stored → Update** fetches only what's new.
+- Downloads run in the background, and the dialog shows live progress.
+
+---
+
+## 7. Built-in library
+
+**34 strategies**
+
+| Category | Strategies |
+|---|---|
+| **Trend** | EMA Crossover, SMA Crossover (Golden Cross), Triple EMA Alignment, MACD Crossover, SuperTrend, Parabolic SAR, ADX / DMI Trend, Ichimoku Cloud Breakout, Hull MA Turn, Aroon Crossover |
+| **Mean Reversion** | RSI Mean Reversion, Bollinger Mean Reversion, Z-Score Reversion, Stochastic Reversal, Williams %R Reversal, CCI Reversal, Connors RSI-2 |
+| **Momentum** | RSI Momentum (50 cross), Rate of Change, TRIX Signal, Trend Pullback (EMA + RSI), MACD Zero-Line Cross, Awesome Oscillator Zero Cross |
+| **Breakout** | Donchian Breakout (Turtle), Bollinger Squeeze Breakout, Keltner Channel Breakout, ATR Volatility Breakout, Chandelier Exit Trend, Breakout with ATR Stops |
+| **Intraday** | Opening Range Breakout, VWAP Cross, VWAP + EMA Trend, Previous Day High/Low Breakout |
+| **My Strategies** | My MA Crossover + Daily Filter (template) |
+
+Most of these have an `allow_short` switch. All of them use **event-based** signals (crosses), not "every bar
+the condition is true", and none use future data. Donchian and price-channel breakouts compare against the
+*previous* bars' high and low.
+
+**39 indicators**
+
+| Category | Indicators |
+|---|---|
+| **Moving Averages** | SMA, EMA, WMA, HMA (Hull), DEMA, TEMA, SMMA (RMA), VWMA, VWAP (session) |
+| **Volatility** | Bollinger Bands, Keltner Channels, Donchian Channels, ATR, Historical Volatility |
+| **Trend** | SuperTrend, Parabolic SAR, Ichimoku Cloud, Pivot Points (daily), Aroon, ADX / DMI |
+| **Momentum** | RSI, MACD, Stochastic, Stochastic RSI, CCI, Williams %R, Rate of Change, Momentum, TRIX, Awesome Oscillator, Ultimate Oscillator |
+| **Statistics** | Z-Score, Standard Deviation |
+| **Volume** | Volume, OBV, Accumulation/Distribution, Chaikin Money Flow, Money Flow Index |
+
+---
+
+## 8. Terminal UI tips
+
+- **Symbol search**: click the symbol name. A green dot means data is stored, and the intervals are listed next to it.
+- **Interval / dates**: `1M 3M 1Y All` quick ranges. Changing them re-runs the last action automatically.
+- **⇆**: docks the panel on the **right** or the **bottom**. Drag the splitter to resize, and drag a pane's bottom edge to resize panes.
+- **Indicators tab**: click to add. Edit parameters and colour inline. Panes can be closed with ×.
+- **Trades tab**: filter winners/losers, sort by any column, click a row to zoom to that trade.
+- Everything you pick (symbol, interval, strategy parameters, settings, indicators, dock side) is remembered in your browser.
+
+---
+
+## 9. CLI
 
 ```bash
 cd backend
+python cli.py symbols
+python cli.py download "RELIANCE INDUSTRIES LTD" 5m 2024-01-01
+python cli.py update   "RELIANCE INDUSTRIES LTD" 5m
+python cli.py import   "TATA CONSULTANCY SERVICES" 1m D:/old/TCS.csv
+python cli.py stored
+python cli.py strategies
+python cli.py backtest "BTCUSD" 1h "SuperTrend" --params factor=2.5 allow_short=true
+python cli.py deep     "RELIANCE INDUSTRIES LTD" 15m "Opening Range Breakout" --settings square_off=true
+python cli.py fyers-login
 ```
 
-Install the dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-The backend dependency set includes FastAPI, Uvicorn, VectorBT, Pandas, Pydantic, Plotly, Requests, Matplotlib, Fyers API, dotenv, and related packages. 
-
----
-
-# Configuration
-
-If API credentials are required, create a `.env` file in the appropriate project location.
-
-Example:
-
-```env
-FYERS_CLIENT_ID=your_client_id
-FYERS_SECRET_KEY=your_secret_key
-FYERS_REDIRECT_URI=your_redirect_uri
-FYERS_ACCESS_TOKEN=your_access_token
-```
-
-> Do not commit API keys, access tokens, passwords, or other secrets to Git.
-
-The repository's ignore configuration already excludes environment files such as `.env` and virtual-environment directories.
-
----
-
-# Running the Backend
-
-From the project root, start the FastAPI application with Uvicorn.
-
-```bash
-uvicorn backend.main:app --reload
-```
-
-The API will normally become available at:
-
-```text
-http://127.0.0.1:8000
-```
-
-FastAPI's interactive documentation can then be accessed through:
-
-```text
-http://127.0.0.1:8000/docs
-```
-
-The application is defined as:
+From a notebook:
 
 ```python
-app = FastAPI(title="HedgeOne Quant API")
+import sys; sys.path.insert(0, "backend")
+import strategies; strategies.load_all()
+from app.engine.runner import run
+res = run("BTCUSD", "1h", "2025-01-01", None, "EMA Crossover", {"fast": 12, "slow": 26}, mode="backtest")
 ```
 
-and exposes versioned data and backtesting routes. 
+---
+
+## 10. API
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/health` | strategy / indicator counts, strategy load errors |
+| GET / POST | `/api/symbols` | catalog (+ stored intervals) / add a symbol |
+| GET | `/api/sources` | sources, supported intervals, login status |
+| POST | `/api/download` → GET `/api/jobs/{id}` | background download + progress |
+| POST | `/api/update?symbol=&interval=` | fetch only new candles |
+| POST | `/api/import-csv` | import a CSV from a path |
+| GET | `/api/inventory` | everything stored on disk |
+| GET | `/api/candles?symbol=&interval=&start=&end=` | OHLCV |
+| GET / POST | `/api/fyers/login-url`, `/api/fyers/token` | Fyers login |
+| GET | `/api/strategies`, `/api/indicators` | library (+ params, source code) |
+| POST | `/api/strategies/reload` | re-import `backend/strategies/*.py` |
+| POST | `/api/indicator` | compute one indicator |
+| POST | `/api/apply`, `/api/backtest`, `/api/deep` | `{symbol, interval, start, end, strategy, params, settings}` |
+| GET / DELETE | `/api/reports`, `/api/reports/{id}` | saved reports |
 
 ---
 
-# API Structure
+## 11. What changed from the previous version
 
-The project organizes its API around versioned functional modules.
+- **Rebuilt backend**: clean `data / engine / api` layers, one registry with a `@strategy` decorator (no more
+  duplicated `strategies.json`), strategies live in their own folder and hot-reload.
+- **Fixed bugs that affected results**: Sharpe annualisation (assumed 24/7 trading), same-bar fills,
+  price-channel / Donchian breakouts that could never trigger, a crash on zero-trade backtests, a crash when data
+  wasn't pre-loaded into the cache, NaN breaking JSON responses, hourly NSE bars anchored at 09:00 instead of 09:15,
+  deprecated pandas frequency aliases. Mislabelled strategies (ADX "trend" with no direction, "RSI Divergence",
+  "EMA Pullback") were replaced with correct ones.
+- **Indicators no longer depend on vectorbt classes that don't exist in open-source vectorbt** (ADX, SUPERTREND,
+  VWAP … crashed before). All 39 are implemented in pandas/numpy and match TradingView formulas.
+- **New**: three data sources with a Parquet store, cost presets, intraday square-off, stops, long/short,
+  exit reasons, MAE/MFE, a deep analysis with insights, a report page with PDF export, a TradingView-style terminal, and a CLI.
+- Time-slice analysis (hour / weekday / week / month / year) from the old version is kept and extended.
 
-## Data API
-
-```text
-/api/v1/data
-```
-
-Used for market-data related operations.
-
-Example functionality includes retrieving OHLCV data using:
-
-```text
-ticker
-start date
-end date
-interval
-```
-
-The underlying data endpoint accepts parameters such as ticker name, date range, and candle interval. 
-
----
-
-## Backtest API
-
-```text
-/api/v1/backtest
-```
-
-Provides functionality related to historical strategy evaluation and backtesting.
+**Roadmap items from `docs/versions/v4.txt` that are now done:** strategy categories, cumulative P&L graph,
+trade P&L view, backtest report + export, 30+ strategies and indicators with parameters, saving tested strategies
+with results (reports).
+Replay mode (bar replay + practice trading) is done too.
+**Still open / next ideas:** parameter optimisation and walk-forward (vectorbt can broadcast a parameter grid),
+running one strategy across many symbols, combining strategies (AND/OR/vote), portfolio-level backtests, replay
+mode, Telegram/email reports, options strategies.
 
 ---
 
-## Indicator API
+## Disclaimer
 
-Indicator-related operations include:
-
-```text
-/asset/indicators
-/asset/indicators/metadata
-/core/indicators/run
-```
-
-These endpoints allow available indicators to be discovered, metadata to be retrieved, and selected indicators to be executed against historical market data. 
-
----
-
-## Strategy API
-
-Strategy-related operations include:
-
-```text
-/asset/strategies
-/asset/strategies/metadata
-/core/strategies/run
-```
-
-A strategy can be selected by name and supplied with parameters before being executed against historical OHLCV data. 
-
----
-
-## Cache API
-
-Cache operations include:
-
-```text
-POST /cache/load
-GET  /cache/keys
-POST /cache/delete
-```
-
-These endpoints manage datasets loaded into the application's cache layer. 
-
----
-
-# Quantitative Research Workflow
-
-A typical HedgeOne-Quant research workflow is:
-
-```text
-1. Select Asset
-       │
-       ▼
-2. Load Historical Data
-       │
-       ▼
-3. Select Date Range
-       │
-       ▼
-4. Select Timeframe
-       │
-       ▼
-5. Resample / Prepare Data
-       │
-       ▼
-6. Calculate Indicators
-       │
-       ▼
-7. Generate Strategy Signals
-       │
-       ▼
-8. Run Backtest
-       │
-       ▼
-9. Analyze Performance
-       │
-       ▼
-10. Iterate / Optimize
-```
-
-This architecture separates data preparation from indicator computation, strategy execution, and backtesting, allowing each component to be independently developed and tested.
-
----
-
-# Example: Researching a Strategy
-
-A strategy can be evaluated using historical price data:
-
-```python
-import vectorbt as vbt
-
-ema_fast = vbt.MA.run(price, 9)
-ema_slow = vbt.MA.run(price, 26)
-
-entries = ema_fast.ma_crossed_above(ema_slow)
-exits = ema_fast.ma_crossed_below(ema_slow)
-
-portfolio = vbt.Portfolio.from_signals(
-    close=price,
-    entries=entries,
-    exits=exits,
-    init_cash=100000,
-    fees=0.0,
-    slippage=0.0,
-    freq=resolution
-)
-
-print("Total Return:", portfolio.total_return())
-print("Win Rate:", portfolio.stats()["Win Rate [%]"])
-print("Sharpe Ratio:", portfolio.sharpe_ratio())
-```
-
-This type of workflow is already demonstrated in the project's quantitative research notebook.
-
----
-
-# Research Notebook
-
-The repository includes:
-
-```text
-St_dev1.ipynb
-```
-
-The notebook is used as a research and development environment for:
-
-* Loading historical data
-* Testing data services
-* Testing cache services
-* Exploring available tickers
-* Testing indicators
-* Testing strategies
-* Running VectorBT portfolios
-* Evaluating performance
-* Performing parameter experiments
-
-For example, the research environment loads historical TCS data and stores it in the caching layer before performing further analysis. 
-
----
-
-# Extending HedgeOne-Quant
-
-The architecture is intended to make quantitative components extensible.
-
-## Adding a New Indicator
-
-A new indicator should generally:
-
-1. Implement the indicator calculation.
-2. Register the indicator.
-3. Define its metadata/parameters.
-4. Expose it through the existing indicator API.
-
-The registry-based design allows the API to dynamically locate the requested indicator function. 
-
----
-
-## Adding a New Strategy
-
-A new strategy should generally:
-
-1. Implement the strategy logic.
-2. Generate entry signals.
-3. Generate exit signals.
-4. Return required indicators.
-5. Register the strategy.
-6. Define strategy metadata and parameters.
-
-The API then resolves the selected strategy from the strategy registry and executes it on the requested historical dataset. 
-
----
-
-# Data Model
-
-The core market-data model is based on OHLCV candles:
-
-```text
-┌─────────────────────────────┐
-│         OHLCV Candle        │
-├─────────────────────────────┤
-│ date_time                   │
-│ open                        │
-│ high                        │
-│ low                         │
-│ close                       │
-│ volume                      │
-└─────────────────────────────┘
-```
-
-This standardized structure allows indicators and strategies to operate independently of the original data source.
----
-
-# Disclaimer
-
-HedgeOne-Quant is a **quantitative research and software-development project**.
-
-Backtesting results, technical indicators, strategy signals, and research outputs are not guarantees of future market performance.
-
-Nothing in this repository should be interpreted as financial, investment, or trading advice.
-
-Users are responsible for independently evaluating strategies, assumptions, data quality, execution costs, and risks before using any strategy with real capital.
-
----
+HedgeOne-Quant is a research and software project. Backtests, indicators and signals don't guarantee future
+results and aren't investment advice. Check data quality, costs and assumptions yourself before trading real capital.
