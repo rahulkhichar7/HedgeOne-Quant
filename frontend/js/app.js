@@ -21,6 +21,12 @@ const S = {
   indicators: saved.indicators || [],  // [{id, name, params, color}]
   dock: saved.dock || "right",
   termSize: saved.termSize || null,
+  // developer mode: develop on TRAIN, validate once on the hidden TEST period
+  dev: { on: false, trainStart: "", trainEnd: "", testStart: "", testEnd: "", ...(saved.dev || {}) },
+  devPeeks: saved.devPeeks || {},      // {strategy: how many times the test period was looked at}
+  uniSel: saved.uniSel || null,        // last universe selection
+  optCfg: saved.optCfg || {},          // {strategy: {grid, objective, min_trades, constraint}}
+  devRevealed: false,
   symbols: [], strategies: [], indicatorDefs: [], defaults: null, costs: {},
   last: null, mode: null, tradeFilter: "all", sort: null,
 };
@@ -29,6 +35,7 @@ const persist = () => {
     localStorage.setItem("h1-state", JSON.stringify({
       symbol: S.symbol, interval: S.interval, start: S.start, end: S.end, strategy: S.strategy,
       params: S.params, settings: S.settings, indicators: S.indicators, dock: S.dock, termSize: S.termSize,
+      dev: S.dev, devPeeks: S.devPeeks, uniSel: S.uniSel, optCfg: S.optCfg,
     }));
   } catch (e) { /* private mode */ }
 };
@@ -136,7 +143,11 @@ $$("#tabs button").forEach((b) => b.onclick = () => showTab(b.dataset.tab));
 /* =====================================================================
    Loading candles
    ===================================================================== */
-const rangeParams = () => ({ symbol: S.symbol, interval: S.interval, start: S.start || null, end: S.end ? S.end + " 23:59:59" : null });
+const normalRange = () => ({ symbol: S.symbol, interval: S.interval, start: S.start || null, end: S.end ? S.end + " 23:59:59" : null });
+/* in developer mode everything except the train/test Backtest only ever sees the TRAIN period */
+const rangeParams = () => S.dev.on
+  ? { symbol: S.symbol, interval: S.interval, start: S.dev.trainStart || null, end: S.dev.trainEnd ? S.dev.trainEnd + " 23:59:59" : null }
+  : normalRange();
 
 async function reload() {
   updateSymLabel();
@@ -154,9 +165,12 @@ async function reload() {
     chart.setTrades([], null);
     chart.setCandles(r.candles);
     S.last = null;
+    hideTest();
     $("#summary").innerHTML = `${r.candles.t.length.toLocaleString()} bars · ${fmtTime(r.candles.t[0])} → ${fmtTime(r.candles.t[r.candles.t.length - 1])}`;
     await drawIndicators();
-    if (S.mode && S.strategy) await runStrategy(S.mode === "deep" ? "backtest" : S.mode, true);
+    // dev mode: re-apply on the train period, but never reveal the test period without a click on Backtest
+    const again = S.mode === "deep" ? "backtest" : S.mode;
+    if (again && S.strategy) await runStrategy(S.dev.on && again === "backtest" ? "apply" : again, true);
   });
 }
 
@@ -236,10 +250,16 @@ function renderStrategyDetail() {
     <div class="form-grid tight" id="paramForm">${s.params.map((p) => paramInput(p, vals[p.name], "p")).join("") || '<span class="muted small">No parameters.</span>'}</div>
     ${settingsForm()}
     <div class="actions">
-      <button class="btn" id="btnApply" title="Plot signals and trade zones (fast)">▶ Apply</button>
-      <button class="btn primary" id="btnBacktest" title="Apply + metrics, equity and drawdown">Backtest</button>
-      <button class="btn accent" id="btnDeep" title="Full analysis + shareable report page">Deep backtest ↗</button>
+      <button class="btn" id="btnApply" title="Plot signals and trade zones (fast)${S.dev.on ? " — train period only" : ""}">▶ Apply</button>
+      <button class="btn primary" id="btnBacktest" title="${S.dev.on ? "Backtest the TRAIN and the hidden TEST period separately and compare them" : "Apply + metrics, equity and drawdown"}">${S.dev.on ? "Train vs test" : "Backtest"}</button>
+      <button class="btn accent" id="btnDeep" title="Full analysis + shareable report page${S.dev.on ? " (train period)" : ""}">${S.dev.on ? "Deep (train)" : "Deep backtest"} ↗</button>
     </div>
+    <div class="actions2">
+      <button class="btn" id="btnOpt" title="Grid-search the parameters${S.dev.on ? " on the TRAIN period" : ""} — report opens in a new tab">⚙ Optimize ↗</button>
+      <button class="btn" id="btnUni" ${S.dev.on ? "disabled" : ""} title="${S.dev.on ? "Universe testing is off in developer mode — validate on the test period first, then switch dev mode off" : "Run these parameters on many stocks / indices / crypto — report opens in a new tab"}">🌐 Universe test ↗</button>
+    </div>
+    ${S.dev.on ? `<div class="devnote"><b>Developer mode.</b> Apply, indicators, replay and the optimizer only see the <b>train</b> period
+      (${esc(S.dev.trainStart || "?")} → ${esc(S.dev.trainEnd || "?")}). <b>Train vs test</b> also runs the hidden <b>test</b> period and compares both.</div>` : ""}
     <div id="deepLink"></div>
     <details class="code"><summary>Source · <span class="muted">${esc(s.module.replace(/\./g, "/"))}.py</span></summary>
       <pre><code>${highlightPy(s.source || "")}</code></pre></details>`;
@@ -250,6 +270,8 @@ function renderStrategyDetail() {
   $("#btnApply").onclick = () => { save(); runStrategy("apply"); };
   $("#btnBacktest").onclick = () => { save(); runStrategy("backtest"); };
   $("#btnDeep").onclick = () => { save(); runStrategy("deep"); };
+  $("#btnOpt").onclick = () => { save(); openOptimizer(); };
+  $("#btnUni").onclick = () => { save(); openUniverse(); };
 }
 
 $("#reloadBtn").onclick = () => guard("Reloading strategies…", async () => {
@@ -278,6 +300,8 @@ async function runStrategy(mode, silent = false) {
   const body = { ...rangeParams(), strategy: S.strategy, params: S.params[S.strategy] || {}, settings: S.settings };
   const label = { apply: "Applying strategy…", backtest: "Backtesting…", deep: "Running deep analysis…" }[mode];
   if (replay && replay.active) return runInReplay(mode, body, label);
+  if (S.dev.on && mode === "backtest") return runDev();
+  if (S.dev.on) hideTest();
   await guard(label, async () => {
     if (mode === "deep") {
       const d = await api.deep(body);
@@ -449,13 +473,14 @@ function renderActiveIndicators() {
   });
 }
 
-async function drawIndicators(ids = null) {
+async function drawIndicators(ids = null, range = null) {
   if (!S.symbol || !chart.times.length) return;
   if (replay && replay.active) { await replay.refresh(); return; }
   const list = S.indicators.filter((x) => !ids || ids.includes(x.id));
+  if (!range && S.devRevealed) range = devFullRange();      // chart currently shows train + test
   for (const ind of list) {
     try {
-      const r = await api.indicator({ ...rangeParams(), name: ind.name, params: ind.params });
+      const r = await api.indicator({ ...(range || rangeParams()), name: ind.name, params: ind.params });
       drawIndicatorResult(ind, r);
     } catch (e) { toast(`${ind.name}: ${e.message}`, "error"); }
   }
@@ -548,20 +573,50 @@ async function runInReplay(mode, body, label) {
    Reports
    ===================================================================== */
 async function loadReports() {
-  const r = await api.reports().catch(() => ({ reports: [] }));
+  const [deep, research] = await Promise.all([api.reports().catch(() => ({ reports: [] })), api.researchReports().catch(() => ({ reports: [] }))]);
   const box = $("#reports");
-  if (!r.reports.length) { box.innerHTML = `<div class="placeholder">No reports yet — run a <b>Deep backtest</b>.</div>`; return; }
-  box.innerHTML = r.reports.map((x) => `
+  if (!deep.reports.length && !research.reports.length) {
+    box.innerHTML = `<div class="placeholder">No reports yet — run a <b>Deep backtest</b>, an <b>Optimize</b> or a <b>Universe test</b>.</div>`;
+    return;
+  }
+  const opt = research.reports.filter((x) => x.kind === "optimize"), uni = research.reports.filter((x) => x.kind === "universe");
+  const del = (attr) => `<button class="btn ghost icon sm" ${attr} title="Delete">🗑</button>`;
+  const params = (p) => esc(Object.entries(p || {}).map(([k, v]) => `${k}=${v}`).join(", "));
+  box.innerHTML =
+    (opt.length ? `<div class="rep-sec">Optimizations</div>` + opt.map((x) => `
+      <div class="rep">
+        <div class="rep-main"><span class="kind opt">OPT</span>${x.dev ? `<span class="kind dev">TRAIN</span>` : ""}<a href="/optimize.html?id=${encodeURIComponent(x.id)}" target="_blank" rel="noopener"><b>${esc(x.strategy)}</b></a>
+          <div class="muted small">${esc(x.symbol)} · ${esc(x.interval)} · ${esc((x.start || "").slice(0, 10))} → ${esc((x.end || "").slice(0, 10))} · ${(x.combos || 0).toLocaleString()} combinations</div>
+          <div class="muted small">best: ${params(x.best_params)}</div></div>
+        <div class="rep-k"><span>${esc(x.objective || "")} ${fmtMetric(x.best, x.objective && /return|CAGR|drawdown|Win|trade|Excess/i.test(x.objective) ? "pct" : "ratio")}</span>
+          <span class="muted small">${esc((x.created || "").replace("T", " "))}</span></div>
+        ${del(`data-rdel="optimize|${esc(x.id)}"`)}
+      </div>`).join("") : "") +
+    (uni.length ? `<div class="rep-sec">Universe tests</div>` + uni.map((x) => `
+      <div class="rep">
+        <div class="rep-main"><span class="kind uni">UNI</span><a href="/universe.html?id=${encodeURIComponent(x.id)}" target="_blank" rel="noopener"><b>${esc(x.strategy)}</b></a>
+          <div class="muted small">${x.symbols} securities · ${esc(x.interval)} · ${esc((x.start || "all").slice(0, 10))} → ${esc((x.end || "").slice(0, 10))}</div>
+          <div class="muted small">${params(x.params)}</div></div>
+        <div class="rep-k"><span>${x.profitable ?? 0} / ${x.ok ?? 0} profitable</span>
+          <span class="muted small">median ${fmtMetric(x.median_return, "pct")}</span>
+          <span class="muted small">${esc((x.created || "").replace("T", " "))}</span></div>
+        ${del(`data-rdel="universe|${esc(x.id)}"`)}
+      </div>`).join("") : "") +
+    (deep.reports.length ? `<div class="rep-sec">Deep backtests</div>` + deep.reports.map((x) => `
     <div class="rep">
       <div class="rep-main"><a href="/report.html?id=${encodeURIComponent(x.id)}" target="_blank" rel="noopener"><b>${esc(x.strategy)}</b></a>
         <div class="muted small">${esc(x.symbol)} · ${esc(x.interval)} · ${esc((x.start || "").slice(0, 10))} → ${esc((x.end || "").slice(0, 10))}</div>
-        <div class="muted small">${esc(Object.entries(x.params || {}).map(([k, v]) => `${k}=${v}`).join(", "))}</div></div>
+        <div class="muted small">${params(x.params)}</div></div>
       <div class="rep-k"><span class="${(x.total_return ?? 0) >= 0 ? "pos" : "neg"}">${fmtMetric(x.total_return, "pct")}</span>
         <span class="muted small">Sharpe ${fmtMetric(x.sharpe, "ratio")} · ${x.trades ?? 0} trades</span>
         <span class="muted small">${esc((x.created || "").replace("T", " "))}</span></div>
-      <button class="btn ghost icon sm" data-del="${esc(x.id)}" title="Delete">🗑</button>
-    </div>`).join("");
+      ${del(`data-del="${esc(x.id)}"`)}
+    </div>`).join("") : "");
   $$("#reports [data-del]").forEach((b) => b.onclick = async () => { await api.deleteReport(b.dataset.del); loadReports(); });
+  $$("#reports [data-rdel]").forEach((b) => b.onclick = async () => {
+    const [kind, id] = b.dataset.rdel.split("|");
+    await api.deleteResearchReport(kind, id); loadReports();
+  });
 }
 
 /* =====================================================================
@@ -655,6 +710,444 @@ $("#fyLogin").onclick = async () => { try { const { url } = await api.fyersUrl()
 $("#fyGo").onclick = async () => { try { await api.fyersToken($("#fyCode").value.trim()); toast("Fyers token saved", "ok"); loadFyers(); } catch (e) { toast(e.message, "error"); } };
 
 /* =====================================================================
+   Developer mode — develop on TRAIN, validate on a hidden TEST period
+   ===================================================================== */
+const dayAdd = (d, n) => { const x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const DEV_KEYS = { trStart: "trainStart", trEnd: "trainEnd", teStart: "testStart", teEnd: "testEnd" };
+
+function applyDevUi() {
+  document.body.classList.toggle("dev", S.dev.on);
+  $("#devBtn").classList.toggle("on", S.dev.on);
+  $("#devBtn").textContent = S.dev.on ? "🧪 Dev mode: on" : "🧪 Dev mode";
+  Object.entries(DEV_KEYS).forEach(([id, k]) => { $("#" + id).value = S.dev[k] || ""; });
+  updateTestState();
+}
+function updateTestState() {
+  const el = $("#testState");
+  el.textContent = S.devRevealed ? "👁" : "🔒";
+  el.title = S.devRevealed ? "Test period shown (you pressed Backtest)" : "Test period hidden until you press Backtest";
+  el.classList.toggle("open", S.devRevealed);
+}
+
+function devError() {
+  const d = S.dev;
+  if (!d.trainStart || !d.trainEnd || !d.testStart || !d.testEnd) return "Set all four train / test dates (or click 70/30).";
+  if (d.trainEnd < d.trainStart) return "Train period: the end is before the start.";
+  if (d.testEnd < d.testStart) return "Test period: the end is before the start.";
+  if (!(d.trainEnd < d.testStart || d.testEnd < d.trainStart)) return "Train and test periods overlap — the test must be data the strategy has never seen.";
+  return null;
+}
+
+function devFullRange() {
+  const a = [S.dev.trainStart, S.dev.testStart].sort()[0], b = [S.dev.trainEnd, S.dev.testEnd].sort()[1];
+  return { symbol: S.symbol, interval: S.interval, start: a, end: b + " 23:59:59" };
+}
+
+/** split the stored data (or the normal date range, if one is set) into train / test */
+async function devSplit(frac, quiet = false) {
+  let a = S.start, b = S.end;
+  if (!a || !b) {
+    const inv = await api.inventory().catch(() => ({ files: [] }));
+    const rows = (inv.files || []).filter((f) => f.symbol === S.symbol && f.first);
+    if (!rows.length) { if (!quiet) toast("No stored data for this symbol yet — download it first.", "error"); return; }
+    a = a || rows.map((r) => r.first.slice(0, 10)).sort()[0];
+    b = b || rows.map((r) => r.last.slice(0, 10)).sort().slice(-1)[0];
+  }
+  const days = Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+  if (days < 4) { if (!quiet) toast("The date range is too short to split.", "error"); return; }
+  const cut = dayAdd(a, Math.max(1, Math.floor(days * frac)));
+  Object.assign(S.dev, { trainStart: a, trainEnd: cut, testStart: dayAdd(cut, 1), testEnd: b });
+  persist(); applyDevUi();
+  if (!quiet) { S.devRevealed = false; renderStrategyDetail(); reload(); toast(`Train ${a} → ${cut} · test ${dayAdd(cut, 1)} → ${b}`, "ok"); }
+}
+
+async function toggleDev() {
+  if (replay && (replay.active || replay.selecting)) { toast("Exit replay first.", "error"); return; }
+  S.dev.on = !S.dev.on;
+  S.devRevealed = false;
+  if (S.dev.on && devError()) await devSplit(0.7, true);
+  persist(); applyDevUi(); renderStrategyDetail();
+  $("#results").innerHTML = `<div class="placeholder">${S.dev.on ? "Developer mode — press <b>Train vs test</b> to backtest both periods and compare them." : "Run <b>Backtest</b> to see metrics."}</div>`;
+  toast(S.dev.on ? "Developer mode on — the chart now shows the TRAIN period only. The test period stays hidden until you press Backtest."
+    : "Developer mode off — back to the normal date range.", "ok", false, 7000);
+  await reload();
+}
+$("#devBtn").onclick = toggleDev;
+$$("#devSplit button").forEach((b) => b.onclick = () => devSplit(+b.dataset.split));
+Object.entries(DEV_KEYS).forEach(([id, k]) => {
+  $("#" + id).onchange = (e) => {
+    S.dev[k] = e.target.value; S.devRevealed = false; persist(); updateTestState();
+    const err = devError();
+    if (err) { toast(err, "error"); return; }
+    renderStrategyDetail(); reload();
+  };
+});
+
+async function runDev() {
+  const err = devError();
+  if (err) { toast(err, "error"); return; }
+  const body = { symbol: S.symbol, interval: S.interval, strategy: S.strategy, params: S.params[S.strategy] || {}, settings: S.settings,
+    train: { start: S.dev.trainStart, end: S.dev.trainEnd }, test: { start: S.dev.testStart, end: S.dev.testEnd } };
+  await guard("Backtesting train + test…", async () => {
+    const r = await api.devBacktest(body);
+    S.devPeeks[S.strategy] = (S.devPeeks[S.strategy] || 0) + 1;
+    persist();
+    S.last = r; S.mode = "backtest"; S.devRevealed = true; S.lastDeep = null;
+    drawDev(r);
+    renderDevResults(r);
+    renderTrades();
+    updateTestState();
+    showTab("results");
+    await drawIndicators(null, devFullRange());
+  });
+}
+
+function drawDev(r) {
+  chart.clearGroup("strategy"); chart.clearGroup("equity");
+  chart.setCandles(r.full.candles);
+  drawStrategyLayers(r.full.chart, null);
+  // each period starts from fresh capital -> show % return from its own start so both are comparable
+  const init = r.meta.settings.init_cash;
+  const pct = (arr) => arr.map((v) => (v === null || v === undefined ? null : (v / init) * 100 - 100));
+  const eq = chart.pane("equity", "Return % — train (blue) | test (orange), each from its own start", 150);
+  chart.addLine("equity", eq, "Train return %", pct(r.train.series.equity), { color: "#2962ff", width: 2 });
+  chart.addLine("equity", eq, "Test return %", pct(r.test.series.equity), { color: "#ff9800", width: 2 });
+  chart.addLine("equity", eq, "Buy & hold %", pct(r.train.series.benchmark.map((v, i) => v ?? r.test.series.benchmark[i])), { color: "#787b86", dashed: true });
+  const dd = chart.pane("drawdown", "Drawdown %", 100);
+  chart.addBaseline("equity", dd, "Drawdown %", r.train.series.drawdown.map((v, i) => v ?? r.test.series.drawdown[i]));
+  chart.setTrades(r.trades, r.full.chart.signals);
+  const k = (x, key) => x.kp[key];
+  $("#summary").innerHTML = `<b>${esc(r.meta.strategy)}</b> · <span class="dv-tag train">Train</span> ${fmtMetric(k(r.train, "total_return"), "pct")}, Sharpe ${fmtMetric(k(r.train, "sharpe"), "ratio")}
+    · <span class="dv-tag test">Test</span> <b class="${(k(r.test, "total_return") ?? 0) >= 0 ? "pos" : "neg"}">${fmtMetric(k(r.test, "total_return"), "pct")}</b>, Sharpe ${fmtMetric(k(r.test, "sharpe"), "ratio")}
+    · <span class="muted">${r.meta.elapsed_ms} ms</span>`;
+  $("#tradeCount").textContent = r.trades.length || "";
+  showTest(r.test.offset > r.train.offset ? r.test.offset : null);
+  // new panes make the chart re-layout for a moment: fit (show both periods) once it has a width again
+  const settle = (n = 0) => {
+    if (axisScale().width() > 0 || n > 40) { chart.fit(); setTimeout(positionShade, 40); }
+    else setTimeout(() => settle(n + 1), 50);
+  };
+  setTimeout(settle, 80);
+}
+
+/* orange overlay over the test period of the chart */
+let shadeIdx = null;
+/* all panes share one time range, but only the bottom pane shows (and measures) the time axis */
+const axisScale = () => chart.panes[chart.panes.length - 1].chart.timeScale();
+function showTest(idx) { shadeIdx = idx; positionShade(); }
+function hideTest() { shadeIdx = null; S.devRevealed = false; positionShade(); if (S.dev.on) updateTestState(); }
+function positionShade() {
+  const el = $("#devShade");
+  if (shadeIdx === null || !chart.times.length) { el.classList.add("hidden"); return; }
+  const ts = axisScale(), host = $("#chart");
+  const w = ts.width();
+  if (w <= 0) {                      // chart is re-laying out (panes added): try again shortly
+    if ((positionShade.retry = (positionShade.retry || 0) + 1) < 20) setTimeout(positionShade, 60);
+    return;
+  }
+  positionShade.retry = 0;
+  const vr = ts.getVisibleLogicalRange(), at = shadeIdx - 0.5;
+  if (!vr || at >= vr.to) { el.classList.add("hidden"); return; }          // test period is off-screen right
+  // bars are evenly spaced, so the visible logical range maps linearly onto the plot width
+  const x = Math.max(0, ((at - vr.from) / (vr.to - vr.from || 1)) * w);
+  if (x >= w) { el.classList.add("hidden"); return; }
+  Object.assign(el.style, { left: host.offsetLeft + x + "px", width: w - x + "px", top: host.offsetTop + "px", height: host.offsetHeight + "px" });
+  el.classList.remove("hidden");
+}
+chart.main.chart.timeScale().subscribeVisibleLogicalRangeChange(() => positionShade());
+new ResizeObserver(() => positionShade()).observe($("#chart"));
+new ResizeObserver(() => positionShade()).observe(chart.main.el);
+
+const BETTER_LOW = new Set(["volatility"]);
+const NEUTRAL = new Set(["trades", "exposure"]);
+function renderDevResults(r) {
+  const m = r.meta, v = r.verdict, peeks = S.devPeeks[m.strategy] || 1;
+  const icon = { good: "✔", warn: "!", bad: "✖" }[v.level] || "•";
+  const rows = r.compare.map((c) => {
+    let dtext = "", cls = "";
+    if (c.diff !== null && c.diff !== undefined && Number.isFinite(c.diff)) {
+      const sign = c.diff > 0 ? "+" : "";
+      dtext = c.fmt === "pct" ? `${sign}${c.diff.toFixed(2)} pts` : c.fmt === "int" ? `${sign}${Math.round(c.diff)}` : `${sign}${c.diff.toFixed(2)}`;
+      if (!NEUTRAL.has(c.key)) cls = (BETTER_LOW.has(c.key) ? -c.diff : c.diff) >= 0 ? "pos" : "neg";
+    }
+    return `<tr><td>${esc(c.label)}</td><td>${fmtMetric(c.train, c.fmt)}</td><td><b>${fmtMetric(c.test, c.fmt)}</b></td><td class="d ${cls}">${dtext}</td></tr>`;
+  }).join("");
+  $("#results").innerHTML = `
+    <div class="res-head"><div><b>${esc(m.strategy)}</b> <span class="muted">· ${esc(m.symbol)} · ${m.interval} · train vs test</span></div>
+      <div class="muted small"><span class="dv-tag train">Train</span> ${esc(r.train.start.slice(0, 10))} → ${esc(r.train.end.slice(0, 10))} · ${r.train.bars.toLocaleString()} bars
+        &nbsp; <span class="dv-tag test">Test</span> ${esc(r.test.start.slice(0, 10))} → ${esc(r.test.end.slice(0, 10))} · ${r.test.bars.toLocaleString()} bars</div></div>
+    <div class="verdict ${v.level}"><span class="vi">${icon}</span><div><div class="vt">${esc(v.title)}</div><div class="vx">${esc(v.text)}</div></div></div>
+    <table class="tt"><thead><tr><th>Metric</th><th class="tr">Train</th><th class="te">Test</th><th>Test − train</th></tr></thead><tbody>${rows}</tbody></table>
+    ${insightCards(r.insights)}
+    <div class="tt-links">
+      <button class="btn" id="ttDeepTrain" title="Full deep-backtest report of the train period">📄 Deep report — train ↗</button>
+      <button class="btn" id="ttDeepTest" title="Full deep-backtest report of the test period">📄 Deep report — test ↗</button>
+    </div>
+    <button class="btn accent wide" id="ttUni" title="Switch developer mode off and test these parameters on many securities">Next: universe test with these parameters →</button>
+    <details class="more"><summary>All train metrics</summary>${metricTables(r.train.metrics)}</details>
+    <details class="more"><summary>All test metrics</summary>${metricTables(r.test.metrics)}</details>
+    <p class="hint">Signals are computed on one continuous run (indicators are already warmed up when the test starts); each period is then traded
+      separately from fresh capital, so a position open at the split is closed at the end of train.
+      You've looked at the test period <b>${peeks}×</b> for this strategy — if you keep tuning until the test looks good, the test quietly becomes training data.</p>`;
+  const deep = async (range, label) => {
+    const w = window.open("", "_blank");
+    if (w) w.document.write(`<p style="font:14px sans-serif;padding:40px">Running deep backtest (${label})…</p>`);
+    try {
+      const d = await api.deep({ symbol: S.symbol, interval: S.interval, start: range.start, end: range.end + " 23:59:59",
+        strategy: S.strategy, params: S.params[S.strategy] || {}, settings: S.settings });
+      if (w) w.location.href = d.url; else window.open(d.url, "_blank");
+    } catch (e) { if (w) w.close(); toast(e.message, "error"); }
+  };
+  $("#ttDeepTrain").onclick = () => deep({ start: S.dev.trainStart, end: S.dev.trainEnd }, "train");
+  $("#ttDeepTest").onclick = () => deep({ start: S.dev.testStart, end: S.dev.testEnd }, "test");
+  $("#ttUni").onclick = async () => {
+    S.start = [S.dev.trainStart, S.dev.testStart].sort()[0];
+    S.end = [S.dev.trainEnd, S.dev.testEnd].sort()[1];
+    $("#start").value = S.start; $("#end").value = S.end;
+    S.dev.on = false; S.devRevealed = false; persist(); applyDevUi(); renderStrategyDetail();
+    await reload();
+    openUniverse();
+  };
+}
+
+/* =====================================================================
+   Parameter optimizer dialog
+   ===================================================================== */
+const OBJECTIVES = [["sharpe", "Sharpe ratio"], ["sortino", "Sortino ratio"], ["calmar", "Calmar ratio (CAGR / max DD)"],
+  ["total_return", "Total return"], ["cagr", "CAGR"], ["excess", "Excess return vs buy & hold"], ["max_dd", "Smallest max drawdown"],
+  ["profit_factor", "Profit factor"], ["win_rate", "Win rate"], ["expectancy_pct", "Average trade return"]];
+const optModal = $("#optModal");
+optModal.addEventListener("click", (e) => { if (e.target === optModal || e.target.closest("[data-close]")) optModal.classList.add("hidden"); });
+
+const niceStep = (span) => {
+  const raw = span / 8, p = Math.pow(10, Math.floor(Math.log10(raw || 1))), f = raw / p;
+  return +((f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p).toPrecision(6);
+};
+function suggestRange(p, v) {
+  v = Number(v ?? p.default);
+  let a = v > 0 ? v * 0.5 : v - 1, b = v > 0 ? v * 2 : v + 1;
+  if (p.min !== null && p.min !== undefined) a = Math.max(a, p.min);
+  if (p.max !== null && p.max !== undefined) b = Math.min(b, p.max);
+  if (p.type === "int") { a = Math.round(a); b = Math.round(b); return { start: a, stop: b, step: Math.max(1, Math.round(niceStep(b - a))) }; }
+  const step = niceStep(b - a || 1);
+  return { start: +(Math.round(a / step) * step).toFixed(6), stop: +(Math.round(b / step) * step).toFixed(6), step };
+}
+
+function optVals(p, mode, value, spec) {
+  const num = p.type === "int" || p.type === "float";
+  const st = p.step ?? (p.type === "int" ? 1 : "any");
+  if (mode === "range") {
+    const r = spec && spec.mode === "range" ? spec : suggestRange(p, value);
+    return `<label>from<input type="number" step="${st}" data-r="start" value="${r.start}"></label>
+      <label>to<input type="number" step="${st}" data-r="stop" value="${r.stop}"></label>
+      <label>step<input type="number" step="any" min="0" data-r="step" value="${r.step}"></label>`;
+  }
+  if (mode === "list") {
+    if (p.type === "bool") return `<span class="muted">true and false</span>`;
+    if (p.type === "select") {
+      const on = new Set((spec && spec.values) || p.options);
+      return p.options.map((o) => `<label><input type="checkbox" data-opt="${esc(o)}" ${on.has(o) ? "checked" : ""}>${esc(o)}</label>`).join("");
+    }
+    const vals = spec && spec.mode === "list" ? spec.values.join(", ") : String(value ?? p.default);
+    return `<input class="wide" data-l value="${esc(vals)}" placeholder="comma-separated, e.g. ${num ? "10, 20, 50" : "09:30, 10:00"}">`;
+  }
+  const v = spec && spec.mode === "fixed" && spec.value !== undefined ? spec.value : (value ?? p.default);
+  if (p.type === "bool") return `<label><input type="checkbox" data-f ${v === true || v === "true" ? "checked" : ""}> on</label>`;
+  if (p.type === "select") return `<select data-f>${p.options.map((o) => `<option ${o === v ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+  return `<input data-f ${num ? `type="number" step="${st}"` : ""} value="${esc(v)}">`;
+}
+
+function optRow(p, value, spec) {
+  const num = p.type === "int" || p.type === "float";
+  const modes = num ? [["fixed", "Fixed"], ["range", "Range"], ["list", "List"]]
+    : p.type === "bool" ? [["fixed", "Fixed"], ["list", "Both"]] : [["fixed", "Fixed"], ["list", "List"]];
+  const mode = spec && modes.some(([k]) => k === spec.mode) ? spec.mode : num ? "range" : "fixed";
+  return `<tr data-p="${esc(p.name)}"><td class="pn">${esc(p.name)}<small>${esc(p.help || (p.min !== null && p.min !== undefined ? `${p.min} … ${p.max ?? ""}` : p.type))}</small></td>
+    <td><select class="om">${modes.map(([k, l]) => `<option value="${k}" ${k === mode ? "selected" : ""}>${l}</option>`).join("")}</select></td>
+    <td><div class="vals">${optVals(p, mode, value, spec)}</div></td><td class="n" data-n></td></tr>`;
+}
+
+function readGrid(def) {
+  const grid = {};
+  $$("#optGrid tr[data-p]").forEach((tr) => {
+    const p = def.params.find((x) => x.name === tr.dataset.p), mode = $(".om", tr).value;
+    let spec, n = 1;
+    if (mode === "range") {
+      const g = (k) => parseFloat($(`[data-r="${k}"]`, tr).value);
+      spec = { mode, start: g("start"), stop: g("stop"), step: g("step") };
+      n = spec.step > 0 ? Math.floor(Math.abs(spec.stop - spec.start) / spec.step + 1e-9) + 1 : NaN;
+    } else if (mode === "list") {
+      if (p.type === "bool") spec = { mode, values: [true, false] };
+      else if (p.type === "select") spec = { mode, values: $$("[data-opt]", tr).filter((c) => c.checked).map((c) => c.dataset.opt) };
+      else spec = { mode, values: $("[data-l]", tr).value.split(",").map((x) => x.trim()).filter(Boolean) };
+      n = spec.values.length;
+    } else {
+      const el = $("[data-f]", tr);
+      spec = { mode, value: el.type === "checkbox" ? el.checked : el.value };
+    }
+    $("[data-n]", tr).textContent = Number.isFinite(n) ? `×${n}` : "×?";
+    grid[p.name] = spec;
+  });
+  return grid;
+}
+
+let optTimer = null;
+function openOptimizer() {
+  const def = S.strategies.find((x) => x.name === S.strategy);
+  if (!def || !S.symbol) return;
+  const cur = { ...Object.fromEntries(def.params.map((p) => [p.name, p.default])), ...(S.params[def.name] || {}) };
+  const cfg = S.optCfg[def.name] || {};
+  const rp = rangeParams();
+  $("#optStrat").textContent = "· " + def.name;
+  $("#optWhere").innerHTML = `On <b>${esc(S.symbol)}</b> · ${esc(S.interval)} · ${esc(rp.start || "first bar")} → ${esc((rp.end || "last bar").slice(0, 10))}
+    ${S.dev.on ? `<span class="dv-tag train">train period only</span>` : ""} — every combination is a full backtest with your current backtest settings (costs, fills, stops).`;
+  $("#optGrid").innerHTML = `<thead><tr><th>Parameter</th><th>Test</th><th>Values</th><th></th></tr></thead><tbody>` +
+    def.params.map((p) => optRow(p, cur[p.name], cfg.grid && cfg.grid[p.name])).join("") + `</tbody>`;
+  if (!def.params.length) $("#optGrid").innerHTML = `<tr><td class="muted">This strategy has no parameters to optimize.</td></tr>`;
+  $("#optObj").innerHTML = OBJECTIVES.map(([k, l]) => `<option value="${k}" ${k === (cfg.objective || "sharpe") ? "selected" : ""}>${l}</option>`).join("");
+  $("#optMin").value = cfg.min_trades ?? 5;
+  $("#optCons").value = cfg.constraint || "";
+  const recount = () => { clearTimeout(optTimer); optTimer = setTimeout(() => countCombos(def), 250); };
+  $$("#optGrid .om").forEach((sel) => sel.onchange = () => {
+    const tr = sel.closest("tr"), p = def.params.find((x) => x.name === tr.dataset.p);
+    $(".vals", tr).innerHTML = optVals(p, sel.value, cur[p.name], null);
+    recount();
+  });
+  $("#optGrid").oninput = recount;
+  $("#optGrid").onchange = recount;
+  $("#optCons").oninput = recount;
+  $("#optGo").onclick = () => runOptimizer(def);
+  optModal.classList.remove("hidden");
+  countCombos(def);
+}
+
+async function countCombos(def) {
+  const box = $("#optCount");
+  const grid = readGrid(def);
+  try {
+    const r = await api.optimizeCount({ ...rangeParams(), strategy: def.name, grid, constraint: $("#optCons").value || null });
+    box.className = "grow " + (r.combos > 3000 ? "warn" : "muted");
+    box.innerHTML = `<b>${r.combos.toLocaleString()}</b> combination${r.combos === 1 ? "" : "s"}${r.dropped ? ` (${r.dropped.toLocaleString()} removed by the constraint)` : ""}` +
+      (r.combos > 3000 ? " — this can take a few minutes" : "");
+    $("#optGo").disabled = r.combos < 1;
+  } catch (e) {
+    box.className = "grow bad"; box.textContent = e.message.replace(/^\w+Error: /, "");
+    $("#optGo").disabled = true;
+  }
+}
+
+async function runOptimizer(def) {
+  const grid = readGrid(def);
+  const cfg = { grid, objective: $("#optObj").value, min_trades: +$("#optMin").value || 0, constraint: $("#optCons").value.trim() || null };
+  const w = window.open("", "_blank");
+  if (w) w.document.write(`<p style="font:14px sans-serif;padding:40px">Starting the optimization…</p>`);
+  try {
+    const r = await api.optimize({ ...rangeParams(), strategy: def.name, settings: S.settings, ...cfg,
+      context: S.dev.on ? { dev: true, train: { start: S.dev.trainStart, end: S.dev.trainEnd } } : {} });
+    S.optCfg[def.name] = cfg; persist();
+    if (w) w.location.href = r.page; else window.open(r.page, "_blank");
+    optModal.classList.add("hidden");
+    toast("Optimization running — the report fills in in the new tab. Use <b>↩ Use in terminal</b> there to load the best parameters here.", "ok", true, 9000);
+  } catch (e) {
+    if (w) w.close();
+    toast(e.message, "error", false, 8000);
+  }
+}
+
+/* =====================================================================
+   Universe test dialog
+   ===================================================================== */
+const uniModal = $("#uniModal");
+uniModal.addEventListener("click", (e) => { if (e.target === uniModal || e.target.closest("[data-close]")) uniModal.classList.add("hidden"); });
+const secType = (s) => (s.market === "CRYPTO" ? "Crypto" : /INDEX/i.test(s.symbol) ? "Index" : "Stock");
+const TYPE_LABEL = { Stock: "Stocks", Index: "Indices", Crypto: "Crypto" };
+let uniSel = new Set();
+
+function openUniverse() {
+  if (S.dev.on) { toast("Universe testing is off in developer mode — switch dev mode off first.", "error"); return; }
+  const def = S.strategies.find((x) => x.name === S.strategy);
+  if (!def) return;
+  const known = new Set(S.symbols.map((x) => x.name));
+  uniSel = new Set((S.uniSel || S.symbols.filter((x) => x.stored.length).map((x) => x.name)).filter((n) => known.has(n)));
+  const p = { ...Object.fromEntries(def.params.map((x) => [x.name, x.default])), ...(S.params[def.name] || {}) };
+  const rp = normalRange();
+  $("#uniStrat").textContent = "· " + def.name;
+  $("#uniWhere").innerHTML = `Parameters <b>${esc(Object.entries(p).map(([k, v]) => `${k}=${v}`).join(", ") || "—")}</b> · interval <b>${esc(S.interval)}</b>
+    · ${esc(rp.start || "all data")}${rp.end ? " → " + esc(rp.end.slice(0, 10)) : ""} · your current backtest settings. Each market uses its own default costs unless you chose a cost model.`;
+  $("#uniSearch").value = "";
+  renderUniList();
+  uniModal.classList.remove("hidden");
+}
+
+function renderUniList() {
+  const f = $("#uniSearch").value.toLowerCase();
+  const groups = {};
+  S.symbols.filter((s) => !f || s.name.toLowerCase().includes(f) || s.symbol.toLowerCase().includes(f))
+    .forEach((s) => (groups[secType(s)] = groups[secType(s)] || []).push(s));
+  $("#uniList").innerHTML = ["Stock", "Index", "Crypto"].filter((t) => groups[t]).map((t) => `
+    <div class="uni-group">${TYPE_LABEL[t]} <span>${groups[t].length}</span><span class="spacer"></span>
+      <button class="btn ghost sm" data-ga="${t}">select all</button><button class="btn ghost sm" data-gn="${t}">none</button></div>
+    <div class="uni-rows">${groups[t].map((s) => `<label class="uni-row ${s.stored.length ? "" : "nodata"}" title="${esc(s.symbol)} · ${esc(s.source)}">
+      <input type="checkbox" data-u="${esc(s.name)}" ${uniSel.has(s.name) ? "checked" : ""}>
+      <span class="dot ${s.stored.length ? "ok" : ""}"></span><span class="nm">${esc(s.name)}</span>
+      <span class="iv">${s.stored.length ? esc(s.stored.join(" ")) : "no data"}</span></label>`).join("")}</div>`).join("") || `<div class="placeholder">No match</div>`;
+  $$("#uniList [data-u]").forEach((c) => c.onchange = () => { c.checked ? uniSel.add(c.dataset.u) : uniSel.delete(c.dataset.u); uniCount(); });
+  const inGroup = (t) => S.symbols.filter((s) => secType(s) === t && (!f || s.name.toLowerCase().includes(f) || s.symbol.toLowerCase().includes(f)));
+  $$("#uniList [data-ga]").forEach((b) => b.onclick = () => { inGroup(b.dataset.ga).forEach((s) => uniSel.add(s.name)); renderUniList(); });
+  $$("#uniList [data-gn]").forEach((b) => b.onclick = () => { inGroup(b.dataset.gn).forEach((s) => uniSel.delete(s.name)); renderUniList(); });
+  uniCount();
+}
+function uniCount() {
+  const noData = [...uniSel].filter((n) => !(S.symbols.find((s) => s.name === n) || { stored: [] }).stored.length).length;
+  $("#uniCount").innerHTML = `<b>${uniSel.size}</b> selected` + (noData ? ` · <span class="neg">${noData} without data</span> (they'll be listed as not tested)` : "");
+  $("#uniGo").disabled = uniSel.size < 1;
+}
+$("#uniSearch").oninput = renderUniList;
+$$("#uniQuick button").forEach((b) => b.onclick = () => {
+  const q = b.dataset.q;
+  uniSel = new Set(q === "all" ? S.symbols.map((s) => s.name) : q === "data" ? S.symbols.filter((s) => s.stored.length).map((s) => s.name) : []);
+  renderUniList();
+});
+$("#uniGo").onclick = async () => {
+  const def = S.strategies.find((x) => x.name === S.strategy);
+  const symbols = S.symbols.map((s) => s.name).filter((n) => uniSel.has(n));
+  const rp = normalRange();
+  const w = window.open("", "_blank");
+  if (w) w.document.write(`<p style="font:14px sans-serif;padding:40px">Starting the universe test…</p>`);
+  try {
+    const r = await api.universe({ symbols, interval: S.interval, start: rp.start, end: rp.end, strategy: def.name,
+      params: S.params[def.name] || {}, settings: S.settings });
+    S.uniSel = symbols; persist();
+    if (w) w.location.href = r.page; else window.open(r.page, "_blank");
+    uniModal.classList.add("hidden");
+    toast(`Universe test running on ${symbols.length} securities — the report fills in in the new tab.`, "ok", false, 7000);
+  } catch (e) {
+    if (w) w.close();
+    toast(e.message, "error", false, 8000);
+  }
+};
+
+/* =====================================================================
+   Parameters sent from an optimizer report ("↩ Use in terminal")
+   ===================================================================== */
+function useParams(raw) {
+  let d;
+  try { d = JSON.parse(raw); } catch (e) { return; }
+  if (!d || !d.strategy || !S.strategies.find((x) => x.name === d.strategy)) return;
+  S.strategy = d.strategy;
+  S.params[d.strategy] = { ...(S.params[d.strategy] || {}), ...d.params };
+  persist();
+  renderStrategyList($("#stratSearch").value);
+  renderStrategyDetail();
+  showTab("strategy");
+  toast(`Loaded from the optimizer: <b>${esc(Object.entries(d.params).map(([k, v]) => `${k}=${v}`).join(", "))}</b>` +
+    (S.dev.on ? " — press <b>Train vs test</b> to validate." : ""), "ok", true, 9000);
+  if (d.symbol && (d.symbol !== S.symbol || d.interval !== S.interval))
+    toast(`Note: these were optimized on ${esc(d.symbol)} ${esc(d.interval)}; the chart shows ${esc(S.symbol)} ${esc(S.interval)}.`, "info", false, 9000);
+}
+window.addEventListener("storage", (e) => { if (e.key === "h1-use-params" && e.newValue) useParams(e.newValue); });
+
+/* =====================================================================
    Boot
    ===================================================================== */
 async function refreshSymbols() {
@@ -666,12 +1159,18 @@ async function refreshSymbols() {
 
 async function boot() {
   applyDock();
+  applyDevUi();
   renderIntervals();
   $("#start").value = S.start; $("#end").value = S.end;
   try {
     const [, , ind, def] = await Promise.all([refreshSymbols(), loadStrategies(), api.indicators(), api.defaults()]);
     S.indicatorDefs = ind.indicators; S.defaults = def; S.costs = def.costs;
     renderIndicatorList(); renderActiveIndicators(); renderStrategyDetail();
+    try {                              // "Use in terminal" clicked while this tab was closed
+      const raw = localStorage.getItem("h1-use-params");
+      if (raw && Date.now() - (JSON.parse(raw).ts || 0) < 15 * 60e3) useParams(raw);
+      localStorage.removeItem("h1-use-params");
+    } catch (e) { /* ignore */ }
     await reload();
   } catch (e) {
     toast("Backend not reachable: " + e.message, "error", false, 15000);

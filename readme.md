@@ -65,11 +65,13 @@ HedgeOne-Quant/
 │   │   └── my_strategies.py    template + example with a daily filter + custom indicator
 │   └── app/
 │       ├── main.py             FastAPI app, serves the frontend
+│       ├── export.py           standalone (offline) HTML export of research reports
 │       ├── config.py           paths, .env, markets (NSE / CRYPTO), cost presets, backtest defaults
 │       ├── api/
 │       │   ├── common.py       NaN-safe JSON, error mapping
 │       │   ├── data.py         /api/symbols, /download, /candles, /import-csv, /fyers/…
-│       │   └── engine.py       /api/strategies, /indicators, /apply, /backtest, /deep, /reports
+│       │   ├── engine.py       /api/strategies, /indicators, /apply, /backtest, /deep, /reports
+│       │   └── research.py     /api/research/optimize, /research/universe, /dev/backtest, research reports + HTML export
 │       ├── data/
 │       │   ├── sources.py      Fyers · Delta Exchange India · CoinDCX · CSV  (one class each)
 │       │   ├── store.py        Parquet store, merge/update, session-aligned resampling, jobs
@@ -81,20 +83,24 @@ HedgeOne-Quant/
 │           ├── backtest.py     vectorbt simulation, costs, fills, stops, metrics
 │           ├── analysis.py     deep analysis, insights, report storage
 │           ├── replay.py       bar replay: look-ahead check + exact point-in-time mode
+│           ├── research.py     parameter optimizer, universe test, developer-mode train/test
 │           └── runner.py       run(symbol, interval, …, mode) — used by API and CLI
 ├── frontend/                   plain HTML / CSS / JS (no build step)
 │   ├── index.html              the terminal
 │   ├── report.html             the report page (Download PDF)
+│   ├── optimize.html · universe.html   research report pages (PDF + offline HTML export)
 │   ├── css/style.css · css/report.css
 │   ├── js/app.js               terminal controller
 │   ├── js/chart.js             chart stack, trade-zone drawing, synced panes, legend
 │   ├── js/replay.js            bar replay controller (playback, intrabar, practice trading)
 │   ├── js/report.js · js/svg.js  report page + small SVG charts
+│   ├── js/optimize.js · js/universe.js · js/research.js   research pages + shared helpers
 │   ├── js/api.js · js/ui.js    fetch wrapper, shared formatting
 │   └── vendor/lightweight-charts.standalone.js   (TradingView Lightweight Charts v4.1, Apache-2.0)
 ├── data/                       (git-ignored, created automatically)
 │   ├── store/<source>/<SYMBOL>__<interval>.parquet
 │   ├── reports/<id>.json
+│   ├── reports/optimize/<id>.json · reports/universe/<id>.json
 │   └── tokens/fyers_token.json
 ├── docs/versions/              your old version notes (v1–v4)
 └── Arbitrage/                  untouched
@@ -217,6 +223,39 @@ replay reloads and keeps your position in time. **Backtest** and **Deep backtest
    is frozen. You see exactly what it would have done live, which is usually much worse than its backtest.
 
 API: `POST /api/replay/prepare` (data + look-ahead check), `POST /api/replay/step` (exact point-in-time mode).
+
+---
+
+## 4c. Research workflow: developer mode → optimize → train vs test → universe 🧪
+
+The recommended loop for building a strategy that holds up on data it has never seen:
+
+1. **🧪 Dev mode** (top bar). Set a **Train** and a **Test** period (or click **70/30** / **80/20** to split the stored data).
+   While dev mode is on, the chart, **Apply**, indicators, replay, **Deep (train)** and the optimizer only ever see the
+   **train** period. The test period stays hidden (🔒).
+2. **⚙ Optimize ↗** (Strategy tab). For every parameter choose **Fixed**, **Range** (from / to / step) or **List**
+   (also *Both* for true/false). Pick what to rank by (Sharpe, Calmar, return, profit factor …), a minimum trade count,
+   and an optional constraint such as `fast < slow`. The live counter shows how many combinations will run (limit 20,000).
+   A new tab opens with the report: best parameters, a heatmap of any two parameters (look for broad green
+   plateaus, not single bright cells), one-parameter sensitivity, top-10 equity curves, risk vs return, the full sortable
+   table, and notes on over-fitting. **↩ Use in terminal** (or *Use* on any row) loads those values into the strategy form.
+3. **Train vs test** (the Backtest button in dev mode). Runs the strategy once over the whole span (so indicators are
+   warmed up), then trades the train and test periods separately from fresh capital. The chart reveals the test
+   period (orange shading), and Results shows train vs test side by side, the difference, and a verdict
+   (*holds up / partly / does not hold up*). The terminal counts how often you looked at the test period — if you keep
+   tuning until the test looks good, the test has become training data.
+4. **🌐 Universe test ↗** (disabled in dev mode; *Next: universe test* in the train/test results switches dev mode off
+   for you). Tick any mix of stocks, indices and crypto. The report has a comparison table, interactive equity and
+   drawdown overlays, an **equal-weight portfolio** of the selection, metric bars, risk vs return, yearly returns,
+   correlation of daily returns, and a full individual analysis for each security (with a *Deep report ↗* button).
+   Tick / untick securities (or use All · Stocks · Indices · Crypto · Profitable · Top 5 …) and every comparison follows.
+
+Both research reports have **⬇ PDF** (print → Save as PDF; the universe PDF can add a page per selected security) and
+**⬇ HTML**, which downloads one self-contained file (data, charts and scripts inlined) that works offline, keeps every
+checkbox and chart interactive, and can be e-mailed or archived. Past runs are listed in the **Reports** tab.
+
+All research runs use exactly the same simulation as **Backtest** (same costs, fills, stops and settings), so any row of
+an optimizer table matches what you get when you backtest those parameters on their own.
 
 ---
 

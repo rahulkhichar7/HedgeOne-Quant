@@ -32,8 +32,21 @@
     </div>
   </div>
 
+  <!-- developer mode: train / test periods (replaces the date range above while on) -->
+  <div class="dev-range" id="devRange">
+    <span class="dv-tag train" title="The chart, Apply, indicators, replay and the optimizer only see this period">Train</span>
+    <input type="date" id="trStart" title="Train from"><span class="muted">→</span><input type="date" id="trEnd" title="Train to">
+    <span class="dv-tag test" title="Held-out data — only Backtest uses it">Test</span>
+    <input type="date" id="teStart" title="Test from"><span class="muted">→</span><input type="date" id="teEnd" title="Test to">
+    <span id="testState" class="dv-state" title="The test period stays hidden until you press Backtest">🔒</span>
+    <div class="seg mini" id="devSplit" title="Split all stored data into train / test">
+      <button data-split="0.7">70/30</button><button data-split="0.8">80/20</button>
+    </div>
+  </div>
+
   <div class="spacer"></div>
   <span id="busy" class="busy hidden"><span class="spin"></span><span id="busyText">Working…</span></span>
+  <button class="btn ghost dev-btn" id="devBtn" title="Developer mode: develop on a train period, validate on a hidden test period">🧪 Dev mode</button>
   <button class="btn ghost" id="dataBtn" title="Download / import data">⬇ Data</button>
   <button class="btn ghost icon" id="dockBtn" title="Dock panel right / bottom">⇆</button>
 </header>
@@ -51,6 +64,7 @@
       <button class="btn ghost sm" id="fitBtn" title="Fit all data">⤢ Fit</button>
     </div>
     <div id="chart" class="chart-host"></div>
+    <div id="devShade" class="dev-shade hidden"><span>TEST · unseen data</span></div>
     <div id="tradeCard" class="trade-card hidden"></div>
     <div id="empty" class="empty hidden">
       <h3>No data yet</h3>
@@ -183,6 +197,55 @@
         <div class="row"><input id="fyCode" class="grow" placeholder="https://127.0.0.1/?s=ok&code=200&auth_code=…"><button class="btn primary" id="fyGo">Save token</button></div>
         <p class="hint">Fyers tokens expire every day, so log in once each morning.</p>
       </section>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PARAMETER OPTIMIZER ============ -->
+<div id="optModal" class="modal hidden">
+  <div class="modal-box wide-box">
+    <div class="modal-head">
+      <h3>Parameter optimization <span class="muted small" id="optStrat"></span></h3>
+      <span class="spacer"></span>
+      <button class="btn ghost icon" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div id="optWhere" class="hint" style="margin-top:0"></div>
+      <table class="opt-grid" id="optGrid"></table>
+      <div class="form-grid" style="margin-top:14px">
+        <label>Rank by<select id="optObj"></select></label>
+        <label title="Combinations with fewer trades are listed but never ranked first">Minimum trades<input type="number" id="optMin" min="0" value="5"></label>
+        <label class="wide" title="Optional Python expression using the parameter names, e.g. fast < slow">Constraint (optional)<input id="optCons" placeholder="e.g.  fast < slow"></label>
+      </div>
+      <div class="row">
+        <span id="optCount" class="grow muted"></span>
+        <button class="btn primary" id="optGo">Run optimization ↗</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ UNIVERSE TEST ============ -->
+<div id="uniModal" class="modal hidden">
+  <div class="modal-box wide-box">
+    <div class="modal-head">
+      <h3>Universe test <span class="muted small" id="uniStrat"></span></h3>
+      <span class="spacer"></span>
+      <button class="btn ghost icon" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div id="uniWhere" class="hint" style="margin-top:0"></div>
+      <div class="row" style="margin-top:8px">
+        <input id="uniSearch" class="grow" placeholder="Search securities…">
+        <div class="seg mini" id="uniQuick">
+          <button data-q="all">All</button><button data-q="data">With data</button><button data-q="none">None</button>
+        </div>
+      </div>
+      <div id="uniList" class="uni-list"></div>
+      <div class="row">
+        <span id="uniCount" class="grow muted"></span>
+        <button class="btn primary" id="uniGo">Run universe test ↗</button>
+      </div>
     </div>
   </div>
 </div>

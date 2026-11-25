@@ -42,4 +42,13 @@ export const api = {
   reports: () => call("GET", "/api/reports"),
   report: (id) => call("GET", `/api/reports/${encodeURIComponent(id)}`),
   deleteReport: (id) => call("DELETE", `/api/reports/${encodeURIComponent(id)}`),
+
+  // research: optimizer, universe test, developer mode
+  optimizeCount: (b) => call("POST", "/api/research/optimize/count", b),
+  optimize: (b) => call("POST", "/api/research/optimize", b),
+  universe: (b) => call("POST", "/api/research/universe", b),
+  devBacktest: (b) => call("POST", "/api/dev/backtest", b),
+  researchReports: () => call("GET", "/api/research/reports"),
+  researchReport: (kind, id) => call("GET", `/api/research/reports/${kind}/${encodeURIComponent(id)}`),
+  deleteResearchReport: (kind, id) => call("DELETE", `/api/research/reports/${kind}/${encodeURIComponent(id)}`),
 };

@@ -14,7 +14,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import config
-from .api import data, engine
+from .api import data, engine, research
 
 # make `import strategies` work regardless of the working directory
 if str(config.BACKEND_DIR) not in sys.path:
@@ -30,6 +30,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 app.include_router(data.router)
 app.include_router(engine.router)
+app.include_router(research.router)
 
 
 @app.get("/api/health")

@@ -125,6 +125,16 @@ def indicator_values(name: str, df: pd.DataFrame, params: dict) -> dict:
 # Simulation
 # ======================================================================
 def simulate(df: pd.DataFrame, sig: Signals, s: config.BacktestSettings, market: config.Market) -> dict:
+    kw, ctx = sim_kwargs(df, sig, s, market)
+    pf = vbt.Portfolio.from_signals(**kw)
+    year_freq = kw["freq"] * bars_per_year(df.attrs.get("interval", "1d"), market)
+    trades = _trades(pf, df, ctx["lx"], ctx["sx"], ctx["square"], ctx["sl"], ctx["tp"], ctx["trailing"])
+    return {"pf": pf, "trades": trades, "year_freq": year_freq, "costs": ctx["costs"]}
+
+
+def sim_kwargs(df: pd.DataFrame, sig: Signals, s: config.BacktestSettings, market: config.Market) -> tuple[dict, dict]:
+    """Everything `vbt.Portfolio.from_signals` needs for one strategy run (shared by the
+    single backtest and the parameter optimizer, so both simulate exactly the same way)."""
     idx = df.index
     preset = config.COST_PRESETS[s.cost_preset or market.default_costs]
     fees = (s.fees_pct if s.fees_pct is not None else preset.fees_pct) / 100
@@ -188,12 +198,10 @@ def simulate(df: pd.DataFrame, sig: Signals, s: config.BacktestSettings, market:
     if tp:
         kw.update(tp_stop=tp / 100)
 
-    pf = vbt.Portfolio.from_signals(**kw)
-    year_freq = kw["freq"] * bars_per_year(df.attrs.get("interval", "1d"), market)
-    trades = _trades(pf, df, lx, sx, square, sl, tp, trailing)
-    return {"pf": pf, "trades": trades, "year_freq": year_freq,
-            "costs": {"preset": preset.label, "fees_pct": fees * 100, "fixed_fee": fixed,
-                      "slippage_pct": slip * 100, "note": preset.note}}
+    ctx = {"lx": lx, "sx": sx, "square": square, "sl": sl, "tp": tp, "trailing": trailing,
+           "costs": {"preset": preset.label, "fees_pct": fees * 100, "fixed_fee": fixed,
+                     "slippage_pct": slip * 100, "note": preset.note}}
+    return kw, ctx
 
 
 def _trades(pf, df, lx, sx, square, sl, tp, trailing) -> pd.DataFrame:
