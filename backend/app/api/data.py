@@ -22,6 +22,17 @@ class DownloadReq(BaseModel):
     end: datetime = Field(default_factory=datetime.now)
 
 
+class BulkItem(BaseModel):
+    symbol: str
+    interval: str = "5m"
+    start: datetime
+    end: datetime | None = None
+
+
+class BulkReq(BaseModel):
+    items: list[BulkItem]
+
+
 class ImportReq(BaseModel):
     symbol: str
     interval: str = "1m"
@@ -74,6 +85,25 @@ def download(req: DownloadReq):
     try:
         store.symbol_info(req.symbol)
         return {"job": store.start_job(store.download, req.symbol, req.interval, req.start, req.end)}
+    except Exception as e:  # noqa: BLE001
+        fail(e)
+
+
+@router.post("/download-many")
+def download_many(req: BulkReq):
+    """Bulk download: many securities / intervals / periods in one background job (sequential)."""
+    try:
+        if not req.items:
+            raise ValueError("Select at least one security")
+        for it in req.items:
+            info = store.symbol_info(it.symbol)
+            src = SOURCES.get(info["source"])
+            if src is None:
+                raise ValueError(f"'{it.symbol}' uses source '{info['source']}', which has no downloader (import a CSV)")
+            if it.interval not in src.intervals:
+                raise ValueError(f"{it.symbol}: {src.label} has no '{it.interval}' interval")
+        items = [it.model_dump() for it in req.items]
+        return {"job": store.start_job(store.download_many, items), "count": len(items)}
     except Exception as e:  # noqa: BLE001
         fail(e)
 

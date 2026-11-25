@@ -636,6 +636,8 @@ function showDataTab(t) {
   $$("[data-dpanel]").forEach((p) => p.classList.toggle("active", p.dataset.dpanel === t));
   if (t === "stored") loadStored();
   if (t === "fyers") loadFyers();
+  $("#dataModal .modal-box").classList.toggle("bulk-open", t === "bulk");
+  if (t === "bulk") loadBulk();
 }
 $$("#dataTabs button").forEach((b) => b.onclick = () => showDataTab(b.dataset.dtab));
 
@@ -687,6 +689,195 @@ async function loadStored() {
   });
 }
 
+/* ---------------- bulk download: many securities / intervals / periods in one go ---------------- */
+const BULK = (() => {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem("h1-bulk") || "{}"); } catch (e) { /* ignore */ }
+  return { rows: saved.rows || {}, common: saved.common || {}, inv: [], job: null, items: [], state: {} };
+})();
+const saveBulk = () => { try { localStorage.setItem("h1-bulk", JSON.stringify({ rows: BULK.rows, common: BULK.common })); } catch (e) { /* ignore */ } };
+const today = () => new Date().toISOString().slice(0, 10);
+const daysAgo = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+const storedFor = (sym, iv) => BULK.inv.find((f) => f.symbol === sym && f.interval === iv);
+
+function bulkRow(s) {
+  const src = SOURCES[s.source];
+  let r = BULK.rows[s.name];
+  if (!r) {
+    const iv = src.intervals.includes("5m") ? "5m" : src.intervals[0];
+    const st = storedFor(s.name, iv);
+    r = BULK.rows[s.name] = { on: false, interval: iv, start: st ? st.last.slice(0, 10) : daysAgo(365), end: today() };
+  }
+  if (!src.intervals.includes(r.interval)) r.interval = src.intervals[0];
+  return r;
+}
+
+async function loadBulk() {
+  SOURCES = await api.sources().catch(() => SOURCES);     // always fresh: login state changes
+  BULK.inv = (await api.inventory().catch(() => ({ files: [] }))).files || [];
+  const all = [...new Set(Object.values(SOURCES).flatMap((x) => x.intervals))];
+  const order = ["1m", "2m", "3m", "5m", "10m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "1d", "3d", "1w", "1M"];
+  all.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  const c = BULK.common;
+  $("#bkIv").innerHTML = all.map((i) => `<option ${i === (c.interval || "5m") ? "selected" : ""}>${i}</option>`).join("");
+  $("#bkStart").value = c.start || daysAgo(365);
+  $("#bkEnd").value = c.end || today();
+  renderBulk();
+}
+
+function bulkSymbols() {
+  const f = $("#bkSearch").value.toLowerCase();
+  return S.symbols.filter((s) => SOURCES[s.source] && (!f || s.name.toLowerCase().includes(f) || s.symbol.toLowerCase().includes(f)));
+}
+
+function renderBulk() {
+  const running = !!BULK.job;
+  const groups = {};
+  bulkSymbols().forEach((s) => (groups[s.source] = groups[s.source] || []).push(s));
+  const stTxt = (name) => {
+    const x = BULK.state[name];
+    if (!x) return "";
+    return `<span class="st ${x.cls}">${esc(x.text)}</span>`;
+  };
+  $("#bkTable").innerHTML = `<thead><tr><th></th><th>Security</th><th>Interval</th><th>From</th><th>To</th><th>Stored (this interval)</th><th>Status</th></tr></thead><tbody>` +
+    Object.entries(groups).map(([src, list]) => {
+      const info = SOURCES[src];
+      return `<tr class="grp"><td colspan="7">${esc(info.label)} · ${list.length}
+          ${src === "fyers" ? `<span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400;margin-left:6px" title="Earlier start dates are moved to the earliest allowed day automatically">Standard plan: intraday 1 yr · daily 5 yrs back</span>` : ""}
+          ${info.ready ? "" : `<span class="srcwarn">⚠ ${esc(info.message || "not ready")}${info.login ? ` — <a href="#" data-fylogin>log in</a>` : ""}</span>`}
+          <button class="btn ghost sm" data-ga="${src}">select all</button><button class="btn ghost sm" data-gn="${src}">none</button></td></tr>` +
+        list.map((s) => {
+          const r = bulkRow(s), st = storedFor(s.name, r.interval);
+          return `<tr class="${r.on ? "" : "off"}" data-b="${esc(s.name)}">
+            <td><input type="checkbox" data-k="on" ${r.on ? "checked" : ""} ${running ? "disabled" : ""}></td>
+            <td class="nm"><b>${esc(s.name)}</b><small>${esc(s.symbol)}</small></td>
+            <td><select data-k="interval" ${running ? "disabled" : ""}>${info.intervals.map((i) => `<option ${i === r.interval ? "selected" : ""}>${i}</option>`).join("")}</select></td>
+            <td><input type="date" data-k="start" value="${esc(r.start)}" ${running ? "disabled" : ""}></td>
+            <td><input type="date" data-k="end" value="${esc(r.end)}" ${running ? "disabled" : ""}></td>
+            <td class="stored">${st ? `${esc(st.first.slice(0, 10))} → ${esc(st.last.slice(0, 10))} · ${st.rows.toLocaleString()}` : "—"}</td>
+            <td class="stc">${stTxt(s.name)}</td></tr>`;
+        }).join("");
+    }).join("") + `</tbody>`;
+  $$("#bkTable tr[data-b]").forEach((tr) => {
+    const r = BULK.rows[tr.dataset.b];
+    $$("[data-k]", tr).forEach((el) => el.onchange = () => {
+      r[el.dataset.k] = el.type === "checkbox" ? el.checked : el.value;
+      saveBulk();
+      if (el.dataset.k === "on") { tr.classList.toggle("off", !el.checked); bulkCount(); }
+      if (el.dataset.k === "interval") renderBulk();       // refresh the "stored" column
+    });
+  });
+  const inGroup = (src) => bulkSymbols().filter((s) => s.source === src);
+  $$("#bkTable [data-ga]").forEach((b) => b.onclick = () => { if (!running) { inGroup(b.dataset.ga).forEach((s) => { BULK.rows[s.name].on = true; }); saveBulk(); renderBulk(); } });
+  $$("#bkTable [data-gn]").forEach((b) => b.onclick = () => { if (!running) { inGroup(b.dataset.gn).forEach((s) => { BULK.rows[s.name].on = false; }); saveBulk(); renderBulk(); } });
+  $$("#bkTable [data-fylogin]").forEach((a) => a.onclick = (e) => { e.preventDefault(); showDataTab("fyers"); });
+  bulkCount();
+}
+
+function bulkSelected() { return S.symbols.filter((s) => SOURCES[s.source] && BULK.rows[s.name] && BULK.rows[s.name].on); }
+function bulkCount() {
+  const sel = bulkSelected();
+  const notReady = sel.filter((s) => !SOURCES[s.source].ready).length;
+  const running = !!BULK.job;
+  $("#bkCount").innerHTML = running ? `Downloading… <b>${BULK.done || 0}</b> of ${BULK.items.length} finished` :
+    `<b>${sel.length}</b> selected` + (notReady ? ` · <span class="neg">${notReady} from a source that isn't ready</span> (they'll fail — log in first)` : "");
+  $("#bkGo").disabled = running || !sel.length;
+  ["#bkApply", "#bkFill"].forEach((id) => { $(id).disabled = running; });
+}
+
+$("#bkSearch").oninput = () => renderBulk();
+$$("#bkQuick button").forEach((b) => b.onclick = () => {
+  if (BULK.job) return;
+  const q = b.dataset.q;
+  if (q === "failed" && !Object.values(BULK.state).some((x) => x.cls === "err")) { toast("Nothing failed in the last run.", "info"); return; }
+  bulkSymbols().forEach((s) => {
+    bulkRow(s).on = q === "all" ? true : q === "data" ? s.stored.length > 0
+      : q === "failed" ? (BULK.state[s.name] || {}).cls === "err" : false;
+  });
+  saveBulk(); renderBulk();
+});
+["bkIv", "bkStart", "bkEnd"].forEach((id) => { $("#" + id).onchange = () => {
+  BULK.common = { interval: $("#bkIv").value, start: $("#bkStart").value, end: $("#bkEnd").value }; saveBulk();
+}; });
+$("#bkApply").onclick = () => {
+  const iv = $("#bkIv").value, a = $("#bkStart").value, b = $("#bkEnd").value;
+  const skipped = [];
+  bulkSelected().forEach((s) => {
+    const r = BULK.rows[s.name];
+    if (SOURCES[s.source].intervals.includes(iv)) r.interval = iv; else skipped.push(s.name);
+    if (a) r.start = a;
+    if (b) r.end = b;
+  });
+  saveBulk(); renderBulk();
+  if (skipped.length) toast(`${iv} isn't offered by the source of: ${skipped.join(", ")} — their interval was left as it was.`, "info", false, 9000);
+};
+$("#bkFill").onclick = () => {
+  let n = 0;
+  bulkSelected().forEach((s) => {
+    const r = BULK.rows[s.name], st = storedFor(s.name, r.interval);
+    if (st) { r.start = st.last.slice(0, 10); r.end = today(); n++; }
+  });
+  saveBulk(); renderBulk();
+  toast(n ? `${n} row(s) now start at their last stored candle (only missing data will be fetched).` : "None of the selected rows has data stored for its interval yet.", n ? "ok" : "info");
+};
+
+$("#bkGo").onclick = async () => {
+  const sel = bulkSelected();
+  const bad = sel.filter((s) => { const r = BULK.rows[s.name]; return !r.start || (r.end && r.end < r.start); });
+  if (bad.length) { toast(`Check the dates of: ${bad.map((s) => s.name).join(", ")}`, "error", false, 8000); return; }
+  const items = sel.map((s) => { const r = BULK.rows[s.name]; return { symbol: s.name, interval: r.interval, start: r.start + "T00:00:00", end: (r.end || today()) + "T23:59:59" }; });
+  try {
+    const { job } = await api.downloadMany(items);
+    BULK.job = job; BULK.items = items; BULK.done = 0; BULK.state = {};
+    items.forEach((it) => { BULK.state[it.symbol] = { cls: "queued", text: "queued" }; });
+    $("#bkBar").classList.remove("hidden");
+    renderBulk();
+    pollBulk();
+  } catch (e) { toast(e.message, "error", false, 9000); }
+};
+
+async function pollBulk() {
+  let j;
+  try { j = await api.job(BULK.job); } catch (e) { BULK.job = null; renderBulk(); return; }
+  let done = 0;
+  for (const line of j.log || []) {
+    const m = /^@item (\d+) (\w+) ?(.*)$/.exec(line);
+    if (!m) continue;
+    const it = BULK.items[+m[1]];
+    if (!it) continue;
+    if (m[2] === "running") BULK.state[it.symbol] = { cls: "run", text: "downloading…" };
+    else if (m[2] === "done") { const [f, st] = m[3].split(" ").map(Number); BULK.state[it.symbol] = { cls: "ok", text: `✓ ${f.toLocaleString()} fetched · ${st.toLocaleString()} stored` }; }
+    else if (m[2] === "error") BULK.state[it.symbol] = { cls: "err", text: "✗ " + m[3] };
+  }
+  for (const line of j.log || []) {       // latest progress text of the running item
+    const m = /^@log (\d+) (.*)$/.exec(line);
+    if (m && BULK.items[+m[1]] && BULK.state[BULK.items[+m[1]].symbol].cls === "run")
+      BULK.state[BULK.items[+m[1]].symbol].text = (/^waiting|rate limit/.test(m[2]) ? "⏸ " : "downloading… ") + m[2].slice(0, 90);
+  }
+  if (j.status !== "running" && j.result) {
+    j.result.results.forEach((r) => {
+      const it = BULK.items[r.i];
+      BULK.state[it.symbol] = r.ok ? { cls: "ok", text: `✓ ${r.fetched.toLocaleString()} fetched · ${r.stored.toLocaleString()} stored` } : { cls: "err", text: "✗ " + r.error };
+    });
+  }
+  done = Object.values(BULK.state).filter((x) => x.cls === "ok" || x.cls === "err").length;
+  BULK.done = done;
+  $("#bkBar i").style.width = `${Math.round((done / BULK.items.length) * 100)}%`;
+  if (j.status === "running") {
+    if (!$("#dataModal").classList.contains("hidden") && $("[data-dpanel=bulk]").classList.contains("active")) renderBulk(); else bulkCount();
+    setTimeout(pollBulk, 1000);
+    return;
+  }
+  BULK.job = null;
+  const ok = j.result ? j.result.ok : 0, failed = j.result ? j.result.failed : 0;
+  toast(j.status === "error" ? `Bulk download failed: ${j.error}` : `Bulk download finished — ${ok} done${failed ? `, ${failed} failed (see the Status column)` : ""}.`,
+    j.status === "error" || failed ? "error" : "ok", false, 9000);
+  await refreshSymbols();
+  BULK.inv = (await api.inventory().catch(() => ({ files: [] }))).files || [];
+  renderBulk();
+  reload();
+}
+
 $("#imGo").onclick = async () => {
   $("#imStatus").textContent = "Importing…";
   try {
@@ -707,7 +898,18 @@ async function loadFyers() {
   $("#fyStatus").innerHTML = s ? (s.ready ? `<span class="pos">● ${esc(s.message)}</span>` : `<span class="neg">● ${esc(s.message)}</span>`) : "";
 }
 $("#fyLogin").onclick = async () => { try { const { url } = await api.fyersUrl(); window.open(url, "_blank"); } catch (e) { toast(e.message, "error"); } };
-$("#fyGo").onclick = async () => { try { await api.fyersToken($("#fyCode").value.trim()); toast("Fyers token saved", "ok"); loadFyers(); } catch (e) { toast(e.message, "error"); } };
+$("#fyGo").onclick = async () => {
+  const b = $("#fyGo"); b.disabled = true;
+  try {
+    await api.fyersToken($("#fyCode").value.trim());
+    toast("Fyers token saved — you're logged in for today.", "ok");
+    $("#fyCode").value = "";
+    loadFyers();
+    SOURCES = await api.sources().catch(() => SOURCES);
+  } catch (e) {
+    toast(/auth|code|expired|invalid/i.test(e.message) ? e.message + " — the auth_code is single-use and expires within minutes: log in again and paste the new URL." : e.message, "error", false, 12000);
+  } finally { b.disabled = false; }
+};
 
 /* =====================================================================
    Developer mode — develop on TRAIN, validate on a hidden TEST period

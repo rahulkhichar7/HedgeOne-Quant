@@ -145,6 +145,7 @@
       <h3>Data manager</h3>
       <nav class="tabs inline" id="dataTabs">
         <button data-dtab="download" class="active">Download</button>
+        <button data-dtab="bulk">Bulk download</button>
         <button data-dtab="stored">Stored</button>
         <button data-dtab="import">Import CSV</button>
         <button data-dtab="symbol">Add symbol</button>
@@ -164,6 +165,28 @@
         <p class="hint">Download the <b>finest</b> interval you'll need (e.g. 1m or 5m) — higher timeframes are built from it automatically. Re-downloading merges new candles into the stored file.</p>
         <div class="row"><button class="btn primary" id="dlGo">Start download</button><span id="dlStatus" class="muted"></span></div>
         <pre id="dlLog" class="log"></pre>
+      </section>
+      <section data-dpanel="bulk">
+        <div class="bulk-common">
+          <span class="bc-title">Apply to all selected</span>
+          <label>Interval<select id="bkIv"></select></label>
+          <label>From<input type="date" id="bkStart"></label>
+          <label>To<input type="date" id="bkEnd"></label>
+          <button class="btn" id="bkApply" title="Set this interval and period on every ticked security">Apply to selected</button>
+          <button class="btn ghost" id="bkFill" title="Set each ticked security's From to its last stored candle, so only the missing data is fetched">From last stored</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <input id="bkSearch" class="grow" placeholder="Search securities…">
+          <div class="seg mini" id="bkQuick"><button data-q="all">All</button><button data-q="data">Stored only</button><button data-q="failed" title="Tick only the rows that failed in the last run, to resume them">Failed</button><button data-q="none">None</button></div>
+        </div>
+        <div class="table-wrap bulk-wrap"><table class="grid bulk" id="bkTable"></table></div>
+        <div class="row">
+          <span id="bkCount" class="grow muted"></span>
+          <button class="btn primary" id="bkGo">Start downloading</button>
+        </div>
+        <div class="pbar2 hidden" id="bkBar"><i></i></div>
+        <p class="hint">Downloads run one after another in the background (brokers rate-limit parallel requests) — one failure never stops the rest, and you can close this dialog.
+          Fyers requests are paced to stay under the Standard plan's 50 requests/minute: when the budget is used up, the queue waits and resumes by itself (shown in the Status column). Each row can have its own interval and period; the bar above sets them for all ticked rows at once.</p>
       </section>
       <section data-dpanel="stored">
         <div class="table-wrap"><table class="grid" id="storedTable"></table></div>
@@ -191,11 +214,13 @@
         <p id="fyStatus" class="muted"></p>
         <ol class="steps">
           <li>Put <code>FYERS_CLIENT_ID</code> and <code>FYERS_SECRET_KEY</code> in <code>backend/.env</code> and restart.</li>
-          <li><button class="btn" id="fyLogin">Open Fyers login</button> — log in; you'll land on a page that may not load. Copy its full URL.</li>
+          <li><button class="btn" id="fyLogin">Open Fyers login</button> — log in. Fyers then sends you to <code>https://127.0.0.1/?…auth_code=…</code>,
+            which shows <b>"This site can't be reached" / "timed out"</b> — that's expected (nothing runs at that address). Copy that page's full URL from the address bar.</li>
           <li>Paste the URL (or just the auth_code) here:</li>
         </ol>
         <div class="row"><input id="fyCode" class="grow" placeholder="https://127.0.0.1/?s=ok&code=200&auth_code=…"><button class="btn primary" id="fyGo">Save token</button></div>
-        <p class="hint">Fyers tokens expire every day, so log in once each morning.</p>
+        <p class="hint">Fyers tokens expire every day, so log in once each morning. The auth_code in the URL works only once and only for a few minutes — paste it soon after logging in.<br>
+          History limits on the Fyers <b>Standard</b> plan: intraday 1 year back, daily 5 years back (longer with FYERS Prime). Earlier start dates are moved to the earliest allowed day automatically.</p>
       </section>
     </div>
   </div>
