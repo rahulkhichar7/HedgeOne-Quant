@@ -5,7 +5,7 @@ import pandas as pd
 from app.engine import Param, Signals, between_time, crossover, crossunder, strategy, ta
 
 
-@strategy("Opening Range Breakout", "Intraday",
+@strategy("Opening Range Breakout", "Intraday", timeframes="intraday",
           range_minutes=Param(15, 5, 120, help="Length of the opening range"),
           exit_time=Param("15:10", help="Flat at this time"),
           sl_pct=Param(0.0, 0, 10, 0.1, help="Optional stop-loss % (0 = range low)"),
@@ -35,7 +35,7 @@ def orb(df, range_minutes, exit_time, sl_pct, allow_short):
     return sig
 
 
-@strategy("VWAP Cross", "Intraday", start=Param("09:30"), stop=Param("14:45"), allow_short=Param(False))
+@strategy("VWAP Cross", "Intraday", timeframes="intraday", start=Param("09:30"), stop=Param("14:45"), allow_short=Param(False))
 def vwap_cross(df, start, stop, allow_short):
     """Price crossing the session VWAP inside a trading window."""
     v = ta.vwap(df)
@@ -47,7 +47,7 @@ def vwap_cross(df, start, stop, allow_short):
     return sig
 
 
-@strategy("VWAP + EMA Trend (intraday)", "Intraday", ema_len=Param(20, 5, 100), start=Param("09:30"), stop=Param("14:30"))
+@strategy("VWAP + EMA Trend (intraday)", "Intraday", timeframes="intraday", ema_len=Param(20, 5, 100), start=Param("09:30"), stop=Param("14:30"))
 def vwap_ema(df, ema_len, start, stop):
     """Long when the fast EMA crosses above VWAP and price is above both; exit on cross back."""
     v, e = ta.vwap(df), ta.ema(df.close, ema_len)
@@ -55,7 +55,7 @@ def vwap_ema(df, ema_len, start, stop):
     return Signals(entries=entries, exits=crossunder(e, v), overlays={"VWAP": v, f"EMA {ema_len}": e})
 
 
-@strategy("Previous Day High/Low Breakout", "Intraday", allow_short=Param(True), exit_time=Param("15:10"))
+@strategy("Previous Day High/Low Breakout", "Intraday", timeframes="intraday", allow_short=Param(True), exit_time=Param("15:10"))
 def pdh_pdl(df, allow_short, exit_time):
     """Break of yesterday's high (long) or low (short), flat by exit_time."""
     day = df.index.normalize()

@@ -239,7 +239,8 @@ export function hbars(el, rows, { names = [], fmt = (v) => v.toFixed(2), center 
       const fill = j === 0 ? (r.color || (v >= center ? GREEN : RED)) : GREY;
       const rect = node(s, "rect", { x: xa, y: y0 + 3 + j * bh, width: Math.max(xb - xa, 1), height: bh - 1, fill, rx: 2, opacity: j === 0 ? 0.95 : 0.6 });
       node(rect, "title", {}, `${r.label}${names[j] ? " · " + names[j] : ""}: ${fmt(v)}`);
-      if (j === 0) node(s, "text", { x: v >= center ? xb + 4 : xa - 4, y: y0 + 3 + bh / 2 + 3.5, "text-anchor": v >= center ? "start" : "end", class: "hbv" }, fmt(v));
+      // value label: right of the bar for positives; for negatives just right of the zero line (never over the row name)
+      if (j === 0) node(s, "text", { x: v >= center ? xb + 4 : x(center) + 4, y: y0 + 3 + bh / 2 + 3.5, "text-anchor": "start", class: "hbv" }, fmt(v));
     });
   });
   names.forEach((nm, j) => node(s, "text", { x: lw + j * 120, y: 13, class: "hbv", fill: j === 0 ? "var(--text)" : GREY }, `${j === 0 ? "■" : "■"} ${nm}`));

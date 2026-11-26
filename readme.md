@@ -1,6 +1,6 @@
 # HedgeOne Quant
 
-A local quant research terminal. It downloads market data from **Fyers**, **Delta Exchange India** and **CoinDCX**
+A local quant research terminal. It downloads market data from **Upstox**, **Delta Exchange India** and **CoinDCX**
 and stores it on your disk. You write strategies in **plain Python** in VS Code, then apply them to a
 **TradingView-style chart** where every trade is shaded green or red. One click backtests the strategy on **vectorbt**
 (open-source, 1.2+), and **Deep backtest** produces a full report page you can save as a PDF.
@@ -27,7 +27,7 @@ cd HedgeOne-Quant\backend
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env          &:: then put your Fyers keys in .env
+copy .env.example .env          &:: then put your Upstox analytics token in .env
 python run.py
 ```
 
@@ -39,7 +39,8 @@ Open **http://127.0.0.1:8000**. The API docs are at http://127.0.0.1:8000/docs.
 **First run:**
 1. Click **⬇ Data**, pick a symbol (e.g. `BTCUSD`, which uses Delta Exchange and needs no key), choose `5m`
    and a date range, then click **Start download**.
-2. For NSE symbols, open **Fyers login** in the same dialog once a day, log in, and paste the redirect URL.
+2. For NSE symbols, put your Upstox **analytics token** in `backend/.env` (`UPSTOX_ANALYTICS_TOKEN`, valid one year — no daily login).
+   **Data → Upstox → Test connection** checks it; the search there finds and adds any NSE/BSE stock or index.
 3. Already have your old HedgeOne CSVs? Use **Import CSV** and give it the file path (the old
    `date_time,open,high,low,close,volume` format works as-is).
 4. Pick a strategy on the right and press **Apply**, **Backtest** or **Deep backtest ↗**.
@@ -54,7 +55,7 @@ HedgeOne-Quant/
 │   ├── run.py                  ← start the server (auto-reloads when you edit code)
 │   ├── cli.py                  ← same features from the terminal (download, backtest, deep …)
 │   ├── requirements.txt
-│   ├── .env.example            ← copy to .env (Fyers keys)
+│   ├── .env.example            ← copy to .env (Upstox analytics token)
 │   ├── strategies/             ← ★ YOUR STRATEGIES — every .py here is auto-loaded
 │   │   ├── __init__.py         (auto-discovery + hot reload)
 │   │   ├── trend.py            10 trend strategies
@@ -69,11 +70,11 @@ HedgeOne-Quant/
 │       ├── config.py           paths, .env, markets (NSE / CRYPTO), cost presets, backtest defaults
 │       ├── api/
 │       │   ├── common.py       NaN-safe JSON, error mapping
-│       │   ├── data.py         /api/symbols, /download, /candles, /import-csv, /fyers/…
+│       │   ├── data.py         /api/symbols, /download, /candles, /import-csv, /upstox/…
 │       │   ├── engine.py       /api/strategies, /indicators, /apply, /backtest, /deep, /reports
 │       │   └── research.py     /api/research/optimize, /research/universe, /dev/backtest, research reports + HTML export
 │       ├── data/
-│       │   ├── sources.py      Fyers · Delta Exchange India · CoinDCX · CSV  (one class each)
+│       │   ├── sources.py      Upstox · Delta Exchange India · CoinDCX · CSV  (one class each)
 │       │   ├── store.py        Parquet store, merge/update, session-aligned resampling, jobs
 │       │   └── symbols.json    symbol catalog (edit or add from the UI)
 │       └── engine/
@@ -101,7 +102,7 @@ HedgeOne-Quant/
 │   ├── store/<source>/<SYMBOL>__<interval>.parquet
 │   ├── reports/<id>.json
 │   ├── reports/optimize/<id>.json · reports/universe/<id>.json
-│   └── tokens/fyers_token.json
+│   └── instruments/            Upstox instrument lists (ticker → instrument key), refreshed daily
 ├── docs/versions/              your old version notes (v1–v4)
 └── Arbitrage/                  untouched
 ```
@@ -279,7 +280,7 @@ an optimizer table matches what you get when you backtest those parameters on th
 
 | Source | Markets | Auth | Intervals | Notes |
 |---|---|---|---|---|
-| **Fyers** (API v3) | NSE stocks, indices, F&O | `FYERS_CLIENT_ID`, `FYERS_SECRET_KEY` in `.env` + daily login | 1m … 4h, 1d | 100-day chunks intraday, 366 days daily; token saved in `data/tokens/` |
+| **Upstox** (API v3) | NSE / BSE stocks and indices | `UPSTOX_ANALYTICS_TOKEN` in `.env` (read-only, valid 1 year) | 1m … 4h, 1d, 1w, 1M | minutes/hours from Jan 2022, daily from 2000; one calendar month per request (≤15m), a quarter (30m/hours), a decade (daily); today via the intraday API. Symbols: `NSE:RELIANCE`, `NSE_INDEX:Nifty 50` or an instrument key. Limits used: 80 % of 50/s · 500/min · 2,000 per 30 min, 4 symbols at once |
 | **Delta Exchange India** | crypto futures (BTCUSD, ETHUSD …) | none | 1m … 1w | `api.india.delta.exchange/v2/history/candles`, 2,000 candles/request |
 | **CoinDCX** | crypto spot (`B-BTC_USDT`, `I-BTC_INR` …) | none | 1m … 1M | `public.coindcx.com/market_data/candles`, 1,000 candles/request |
 | **CSV** | anything | none | any | `date_time, open, high, low, close, volume` (DD/MM/YYYY or ISO or epoch) |
@@ -344,7 +345,7 @@ python cli.py stored
 python cli.py strategies
 python cli.py backtest "BTCUSD" 1h "SuperTrend" --params factor=2.5 allow_short=true
 python cli.py deep     "RELIANCE INDUSTRIES LTD" 15m "Opening Range Breakout" --settings square_off=true
-python cli.py fyers-login
+python cli.py upstox-search "tata motors"     # exact Upstox name / instrument key
 ```
 
 From a notebook:
@@ -370,7 +371,7 @@ res = run("BTCUSD", "1h", "2025-01-01", None, "EMA Crossover", {"fast": 12, "slo
 | POST | `/api/import-csv` | import a CSV from a path |
 | GET | `/api/inventory` | everything stored on disk |
 | GET | `/api/candles?symbol=&interval=&start=&end=` | OHLCV |
-| GET / POST | `/api/fyers/login-url`, `/api/fyers/token` | Fyers login |
+| GET | `/api/upstox/search?q=`, `/api/upstox/check` | find Upstox instruments · test the token |
 | GET | `/api/strategies`, `/api/indicators` | library (+ params, source code) |
 | POST | `/api/strategies/reload` | re-import `backend/strategies/*.py` |
 | POST | `/api/indicator` | compute one indicator |

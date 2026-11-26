@@ -9,7 +9,7 @@ Command-line helper (run from the backend/ folder):
   python cli.py strategies
   python cli.py backtest "RELIANCE INDUSTRIES LTD" 15m "EMA Crossover" --params fast=9 slow=21 --start 2025-01-01
   python cli.py deep     "RELIANCE INDUSTRIES LTD" 15m "EMA Crossover"          # saves a report
-  python cli.py fyers-login          # prints the login URL, then asks for the redirect URL
+  python cli.py upstox-search "tata motors"   # find the exact Upstox name / key of a stock or index
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def main():
     sub.add_parser("symbols")
     sub.add_parser("stored")
     sub.add_parser("strategies")
-    sub.add_parser("fyers-login")
+    us = sub.add_parser("upstox-search"); us.add_argument("query")
     d = sub.add_parser("download"); d.add_argument("symbol"); d.add_argument("interval"); d.add_argument("start"); d.add_argument("end", nargs="?")
     u = sub.add_parser("update"); u.add_argument("symbol"); u.add_argument("interval")
     i = sub.add_parser("import"); i.add_argument("symbol"); i.add_argument("interval"); i.add_argument("path"); i.add_argument("--monthfirst", action="store_true")
@@ -62,10 +62,9 @@ def main():
         print(store.update(a.symbol, a.interval, progress=print))
     elif a.cmd == "import":
         print(store.import_csv(a.symbol, a.interval, a.path, dayfirst=not a.monthfirst))
-    elif a.cmd == "fyers-login":
-        fy = SOURCES["fyers"]
-        print("Open this URL, log in, then paste the URL you were redirected to:\n", fy.login_url())
-        print(fy.set_auth_code(input("redirect URL / auth_code: ").strip()))
+    elif a.cmd == "upstox-search":
+        for r in SOURCES["upstox"].search(a.query):
+            print(f"{r['symbol']:40s} {r['instrument_key']:28s} {r['name']}")
     else:
         import strategies
         errs = strategies.load_all()

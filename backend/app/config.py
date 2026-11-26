@@ -30,9 +30,8 @@ for _d in (STORE_DIR, REPORTS_DIR, TOKENS_DIR):
 SYMBOLS_FILE = Path(__file__).resolve().parent / "data" / "symbols.json"
 
 # ------------------------------------------------------------------ secrets
-FYERS_CLIENT_ID = os.getenv("FYERS_CLIENT_ID", "")
-FYERS_SECRET_KEY = os.getenv("FYERS_SECRET_KEY", "")
-FYERS_REDIRECT_URI = os.getenv("FYERS_REDIRECT_URI", "https://127.0.0.1/")
+# Upstox analytics token (read-only, valid one year): https://account.upstox.com/developer/apps
+UPSTOX_ANALYTICS_TOKEN = os.getenv("UPSTOX_ANALYTICS_TOKEN", "")
 
 # All timestamps are stored as *naive* local time of this zone (IST).
 TIMEZONE = os.getenv("HEDGEONE_TZ", "Asia/Kolkata")

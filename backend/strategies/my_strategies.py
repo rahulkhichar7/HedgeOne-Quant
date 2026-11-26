@@ -14,6 +14,10 @@ Cheat-sheet
   htf(df, "1d", lambda d: ta.ema(d.close, 20))     higher-timeframe value, no look-ahead
   load("NIFTY 50", "1d")                           another symbol from your local store
 
+@strategy(..., timeframes=...)   which candle sizes the optimizer may test this strategy on:
+  (leave out)  automatic — any size, narrowed by what you use (htf "1d" → below 1d, between_time → intraday)
+  "any" · "intraday" · "fixed" · ("5m", "1h") range · ["5m", "15m"] list
+
 Signals(entries, exits, short_entries=None, short_exits=None,
         overlays={name: series},          # lines on the price chart
         panes={"Pane": {name: series}},   # separate indicator panes

@@ -28,7 +28,8 @@ from . import analysis
 from .backtest import (bars_per_year, candles_json, chart_payload, epoch_seconds, get_strategy, metrics,
                        run_signals, series, settings_dict, settings_from, sim_kwargs, simulate, to_list,
                        trades_json)
-from .base import Signals
+from .base import Signals, record_usage
+from ..data.sources import interval_seconds
 
 MAX_COMBOS = 20_000          # hard limit per optimization run
 CURVE_POINTS = 400           # points kept per equity curve in reports
@@ -42,6 +43,10 @@ OPT_METRICS = [
     ("expectancy_pct", "Avg trade", "pct"), ("trades", "Trades", "int"), ("exposure", "Time in mkt", "pct"),
 ]
 OBJECTIVES = {k: l for k, l, _ in OPT_METRICS if k not in ("trades", "exposure")}
+
+# candle sizes the optimizer can test as a "timeframe" parameter
+TF_ORDER = ["1m", "2m", "3m", "5m", "10m", "15m", "20m", "30m", "45m", "1h", "2h", "3h", "4h", "1d", "1w"]
+DAY = 86_400
 
 
 # ======================================================================
@@ -177,6 +182,81 @@ def expand_grid(spec, grid: dict, constraint: str | None = None) -> tuple[dict, 
 
 
 # ======================================================================
+# Timeframe (candle size) as an optimizer dimension
+# ======================================================================
+def tf_key(spec) -> str:
+    """name of the pseudo-parameter that holds the interval (never clashes with a real parameter)"""
+    return "timeframe" if "timeframe" not in spec.params else "tf_interval"
+
+
+def _tf_rule(spec, symbol: str, interval: str, start, end, params: dict | None):
+    """-> (predicate(seconds) -> bool, reason shown for blocked intervals, how it was decided)"""
+    tf = spec.timeframes
+    if tf == "fixed":
+        cur = interval_seconds(interval)
+        return (lambda sec: sec == cur), "the strategy is marked timeframes=\"fixed\"", "fixed"
+    if tf in (None, "auto"):
+        try:                                     # probe: which helpers does the strategy actually use?
+            df = store.load(symbol, interval, start, end)
+            df = df.tail(3000).copy()
+            df.attrs.update(symbol=symbol, interval=interval, market=store.market_of(symbol).name)
+            with record_usage() as used:
+                run_signals(spec, df, params or {})
+        except Exception as e:  # noqa: BLE001
+            return (lambda sec: True), "", f"auto (probe failed: {type(e).__name__}) — all intervals offered"
+        limit, inclusive, why = math.inf, False, []
+        if any(k == "intraday" for k, _ in used):
+            limit, why = DAY, ["uses intraday timing (" + ", ".join(sorted({v for k, v in used if k == "intraday"})) + ")"]
+        for k, v in used:
+            if k == "htf":
+                sec = interval_seconds(v)
+                if sec < limit or (sec == limit and inclusive):
+                    limit, inclusive = sec, False
+                why.append(f"uses {v} candles via htf()")
+            elif k == "load":
+                sec = interval_seconds(v)
+                if sec < limit:
+                    limit, inclusive = sec, True
+                why.append(f"loads other data at {v}")
+        if limit == math.inf:
+            return (lambda sec: True), "", "auto — the strategy only uses the chart's candles"
+        pred = (lambda sec: sec <= limit) if inclusive else (lambda sec: sec < limit)
+        return pred, "the strategy " + "; ".join(dict.fromkeys(why)), "auto — " + "; ".join(dict.fromkeys(why))
+    if tf == "any":
+        return (lambda sec: True), "", "any (set on the strategy)"
+    if tf == "intraday":
+        return (lambda sec: sec < DAY), "the strategy is marked intraday-only", "intraday (set on the strategy)"
+    if isinstance(tf, tuple) and len(tf) == 2:
+        lo, hi = interval_seconds(tf[0]), interval_seconds(tf[1])
+        return (lambda sec: lo <= sec <= hi), f"outside the strategy's range {tf[0]}–{tf[1]}", f"{tf[0]}–{tf[1]} (set on the strategy)"
+    if isinstance(tf, (list, set)):
+        ok = {interval_seconds(x) for x in tf}
+        return (lambda sec: sec in ok), "not in the strategy's list", "list (set on the strategy): " + ", ".join(tf)
+    return (lambda sec: True), "", f"unknown timeframes={tf!r} — all intervals offered"
+
+
+def timeframe_options(symbol: str, strategy: str, interval: str, start=None, end=None, params: dict | None = None) -> dict:
+    spec = get_strategy(strategy)
+    have = store.stored_intervals(symbol)
+    if not have:
+        raise FileNotFoundError(f"No data stored for '{symbol}'")
+    pred, why, mode = _tf_rule(spec, symbol, interval, start, end, params)
+    allowed, blocked = [], {}
+    for iv in TF_ORDER:
+        try:
+            store.best_base(symbol, iv)
+        except Exception:  # noqa: BLE001
+            blocked[iv] = f"can't be built from the stored data ({', '.join(have)})"
+            continue
+        if not pred(interval_seconds(iv)):
+            blocked[iv] = why
+            continue
+        allowed.append(iv)
+    return {"allowed": allowed, "blocked": blocked, "mode": mode, "stored": have, "current": interval,
+            "fixed": spec.timeframes == "fixed", "key": tf_key(spec)}
+
+
+# ======================================================================
 # Fast per-combination metrics
 # ======================================================================
 def _compact(eq: np.ndarray, recs, init_cash: float, bpy: float, bh_pct: float, n_bars: int, exposure=None) -> dict:
@@ -282,50 +362,84 @@ def _batch_2d(kws: list[dict]) -> list[tuple[np.ndarray, np.ndarray]]:
 # ======================================================================
 # 1) Parameter optimizer
 # ======================================================================
+def _norm_tfs(intervals, interval: str) -> list[str]:
+    tfs = list(dict.fromkeys([x for x in (intervals or []) if x])) or [interval]
+    for x in tfs:
+        interval_seconds(x)                       # validates the spelling
+    return sorted(tfs, key=interval_seconds)
+
+
+def count_combos(spec, grid, constraint, intervals, interval) -> dict:
+    values, combos, dropped = expand_grid(spec, grid or {}, constraint)
+    tfs = _norm_tfs(intervals, interval)
+    total = len(combos) * len(tfs)
+    if total > MAX_COMBOS:
+        raise ValueError(f"{total:,} combinations ({len(combos):,} × {len(tfs)} timeframes) — the limit is "
+                         f"{MAX_COMBOS:,}. Use bigger steps, fewer timeframes or fix some parameters.")
+    return {"combos": total, "per_timeframe": len(combos), "timeframes": tfs, "dropped": dropped * len(tfs), "values": values}
+
+
 def optimize(symbol: str, interval: str, start=None, end=None, strategy: str = "", grid: dict | None = None,
              settings: dict | None = None, objective: str = "sharpe", min_trades: int = 5,
-             constraint: str | None = None, context: dict | None = None, progress=None) -> dict:
+             constraint: str | None = None, context: dict | None = None, intervals: list[str] | None = None,
+             progress=None) -> dict:
     t0 = time.perf_counter()
     say = progress or (lambda m: None)
     if objective not in OBJECTIVES:
         raise ValueError(f"Unknown objective '{objective}'")
-    df = store.load(symbol, interval, start, end)
-    if len(df) < 2:
-        raise ValueError("Not enough candles in the selected range")
     market = store.market_of(symbol)
     spec = get_strategy(strategy)
     s = settings_from(settings)
+    cnt = count_combos(spec, grid, constraint, intervals, interval)
     values, combos, dropped = expand_grid(spec, grid or {}, constraint)
     if not combos:
         raise ValueError("No combinations left to test (check the constraint)")
+    tfs = cnt["timeframes"]
+    multi = len(tfs) > 1
+    TFK = tf_key(spec)
+    if multi:
+        values[TFK] = tfs                          # the interval behaves like one more parameter
     varying = [k for k, v in values.items() if len(v) > 1]
-    n, total = len(df), len(combos)
-    bpy = bars_per_year(interval, market)
-    bh = float((df.close.iloc[-1] / df.close.iloc[0] - 1) * 100)
-    pos = sample_idx(n)
-    chunk = max(1, min(400, CELL_BUDGET // max(n, 1)))
-    say(f"[0/{total}] {total:,} combinations on {n:,} bars")
+    total = cnt["combos"]
+    say(f"[0/{total}] {total:,} combinations" + (f" on {len(tfs)} timeframes" if multi else ""))
 
-    rows, curves, errors = [], [], []
+    rows, curves, errors, frames, tf_failed = [], [], [], {}, {}
     done = 0
-    for k in range(0, total, chunk):
-        part = combos[k:k + chunk]
-        kws, ok = [], []
-        for c in part:
-            try:
-                sig = run_signals(spec, df, c)
-                kw, _ = sim_kwargs(df, sig, s, market)
-                kws.append(kw)
-                ok.append(c)
-            except Exception as e:  # noqa: BLE001 — one bad combination must not kill the run
-                errors.append({"params": c, "error": f"{type(e).__name__}: {e}"})
-        if kws:
-            for c, (eq, recs) in zip(ok, _batch(kws)):
-                m = _compact(eq, recs, s.init_cash, bpy, bh, n)
-                rows.append({"params": c, **m})
-                curves.append(np.round(eq[pos] / s.init_cash * 100 - 100, 3).astype(np.float32))
-        done += len(part)
-        say(f"[{done}/{total}] backtested {done:,} of {total:,} combinations")
+    for tf in tfs:
+        try:
+            df = store.load(symbol, tf, start, end)
+            if len(df) < 2:
+                raise ValueError("not enough candles in the selected range")
+        except Exception as e:  # noqa: BLE001
+            errors.append({"params": {TFK: tf} if multi else {}, "error": f"{tf}: {type(e).__name__}: {e}"})
+            tf_failed[tf] = f"{type(e).__name__}: {e}"
+            done += len(combos)
+            continue
+        n = len(df)
+        bpy = bars_per_year(tf, market)
+        bh = float((df.close.iloc[-1] / df.close.iloc[0] - 1) * 100)
+        pos = sample_idx(n)
+        frames[tf] = {"df": df, "pos": pos, "t": epoch_seconds(df.index[pos]), "bh": bh, "bars": n,
+                      "start": str(df.index[0]), "end": str(df.index[-1]), "base": store.best_base(symbol, tf, start, end)}
+        chunk = max(1, min(400, CELL_BUDGET // max(n, 1)))
+        for k in range(0, len(combos), chunk):
+            part = combos[k:k + chunk]
+            kws, ok = [], []
+            for c in part:
+                try:
+                    sig = run_signals(spec, df, c)
+                    kw, _ = sim_kwargs(df, sig, s, market)
+                    kws.append(kw)
+                    ok.append(c)
+                except Exception as e:  # noqa: BLE001 — one bad combination must not kill the run
+                    errors.append({"params": {**c, **({TFK: tf} if multi else {})}, "error": f"{type(e).__name__}: {e}"})
+            if kws:
+                for c, (eq, recs) in zip(ok, _batch(kws)):
+                    m = _compact(eq, recs, s.init_cash, bpy, bh, n)
+                    rows.append({"params": {**c, **({TFK: tf} if multi else {})}, "interval": tf, **m})
+                    curves.append((tf, np.round(eq[pos] / s.init_cash * 100 - 100, 3).astype(np.float32)))
+            done += len(part)
+            say(f"[{done}/{total}] backtested {done:,} of {total:,} combinations" + (f" ({tf})" if multi else ""))
     if not rows:
         raise ValueError("Every combination failed: " + (errors[0]["error"] if errors else "unknown error"))
 
@@ -343,6 +457,8 @@ def optimize(symbol: str, interval: str, start=None, end=None, strategy: str = "
 
     # ---- the best combination, fully (same path as the Backtest button)
     say(f"[{total}/{total}] full backtest of the best combination")
+    F = frames[best["interval"]]
+    df, pos, n, bh = F["df"], F["pos"], F["bars"], F["bh"]
     sig = run_signals(spec, df, best["params"])
     sim = simulate(df, sig, s, market)
     best_metrics = metrics(sim, df, s)
@@ -354,14 +470,30 @@ def optimize(symbol: str, interval: str, start=None, end=None, strategy: str = "
                    "drawdown": to_list(_bucket_min(dd, pos), 3)}
 
     top = [i for i, r in enumerate(rows) if r["eligible"]][:10] or [0]
-    top_curves = [{"rank": rows[i]["rank"], "params": rows[i]["params"], "values": to_list(curves[i], 3)} for i in top]
+    top_curves = [{"rank": rows[i]["rank"], "params": rows[i]["params"], "interval": curves[i][0],
+                   "t": frames[curves[i][0]]["t"], "values": to_list(curves[i][1], 3)} for i in top]
+    by_tf = []
+    for tf in tfs:
+        if tf not in frames:
+            continue
+        rs = [r for r in rows if r["interval"] == tf]
+        el = [r for r in rs if r["eligible"]] or rs
+        b = el[0] if el else None                                      # rows are already ranked
+        by_tf.append({"interval": tf, "bars": frames[tf]["bars"], "buy_hold": frames[tf]["bh"], "tested": len(rs),
+                      "start": frames[tf]["start"], "end": frames[tf]["end"], "built_from": frames[tf]["base"],
+                      "eligible": sum(r["eligible"] for r in rs),
+                      "profitable": _num(np.mean([(r["total_return"] or 0) > 0 for r in rs]) * 100) if rs else None,
+                      "best": {k: b[k] for k in ("params", "rank", "total_return", "sharpe", "trades", "max_dd", objective)} if b else None})
     sens = _sensitivity(rows, values, varying, objective)
     neighbours = _neighbours(rows, values, varying, objective)
     elapsed = round((time.perf_counter() - t0) * 1000)
 
     payload = {
         "kind": "optimize",
-        "meta": {"symbol": symbol, "interval": interval, "market": market.name, "strategy": strategy,
+        "meta": {"symbol": symbol, "interval": best["interval"], "base_interval": interval, "timeframes": tfs,
+                 "tf_key": TFK if multi else None, "tf_failed": tf_failed,
+                 "tf_minutes": {tf: interval_seconds(tf) / 60 for tf in tfs},
+                 "market": market.name, "strategy": strategy,
                  "category": spec.category, "start": str(df.index[0]), "end": str(df.index[-1]), "bars": n,
                  "objective": objective, "objective_label": OBJECTIVES[objective], "min_trades": int(min_trades),
                  "constraint": constraint or "", "settings": settings_dict(s), "costs": sim["costs"],
@@ -374,6 +506,7 @@ def optimize(symbol: str, interval: str, start=None, end=None, strategy: str = "
         "best": {"params": best["params"], "metrics": best_metrics, "series": best_series,
                  "trades": int(len(sim["trades"]))},
         "curves": {"t": times, "top": top_curves},
+        "by_timeframe": by_tf,
         "sensitivity": sens,
         "neighbours": neighbours,
         "errors": errors[:50],
@@ -430,6 +563,34 @@ def _opt_insights(P) -> list[dict]:
         add("info", "Optimized on the TRAIN period only",
             "The test period was not used. Load the best parameters in the terminal and press Backtest "
             "in developer mode to see how they do on unseen data.")
+    if m.get("tf_failed"):
+        add("warn", f"{len(m['tf_failed'])} timeframe(s) couldn't be tested",
+            "; ".join(f"{k}: {v}" for k, v in m["tf_failed"].items()))
+    bt = [x for x in (P.get("by_timeframe") or []) if x.get("best")]
+    if len(bt) > 1:
+        fmt = lambda v: "—" if v is None else f"{v:.2f}"  # noqa: E731
+        add("info", f"Best timeframe: {best.get('interval')}",
+            f"Best {lab} per timeframe — " + " · ".join(f"{x['interval']} {fmt(x['best'].get(obj))}" for x in bt) +
+            ". Parameters are counted in candles, so similar results on neighbouring timeframes with "
+            "proportionally different lengths are the same idea (see 'Lookback in time').")
+        tfs = m.get("timeframes") or []
+        if len(tfs) > 2 and best.get("interval") in (tfs[0], tfs[-1]):
+            add("info", "Best timeframe is at the edge of the tested ones",
+                f"{best['interval']} is the {'smallest' if best['interval'] == tfs[0] else 'largest'} timeframe tested — "
+                "include the next one too, to see whether it keeps improving.")
+        span = {x["interval"]: (pd.Timestamp(x["end"]) - pd.Timestamp(x["start"])).total_seconds() for x in bt}
+        longest = max(span.values()) or 1
+        short = [k for k, v in span.items() if v < longest * 0.9]
+        if short:
+            add("warn", "Timeframes cover different periods",
+                "Less history is stored for " + ", ".join(f"{x['interval']} ({x['start'][:10]} → {x['end'][:10]}, built from {x['built_from']})"
+                                                         for x in bt if x["interval"] in short) +
+                " than for the others, so they aren't compared on the same market. Set a common date range, or download "
+                "the finest interval for the whole period (the larger timeframes are built from it).")
+        fin = bt[0]
+        if (fin["best"].get("total_return") or 0) <= 0 and any((x["best"].get("total_return") or 0) > 0 for x in bt[1:]):
+            add("info", f"The smallest candles ({fin['interval']}) don't pay", "More trades means more fees and slippage — "
+                "the same idea only makes money on larger candles here.")
     if not best["eligible"]:
         add("bad", "No combination reached the minimum trade count",
             f"Every combination made fewer than {m['min_trades']} trades, so the ranking is not meaningful.")

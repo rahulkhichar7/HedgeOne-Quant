@@ -27,8 +27,8 @@ export const api = {
   job: (id) => call("GET", `/api/jobs/${id}`),
   importCsv: (b) => call("POST", "/api/import-csv", b),
   candles: (p) => call("GET", "/api/candles?" + q(p)),
-  fyersUrl: () => call("GET", "/api/fyers/login-url"),
-  fyersToken: (auth_code) => call("POST", "/api/fyers/token", { auth_code }),
+  upstoxSearch: (text) => call("GET", "/api/upstox/search?" + q({ q: text })),
+  upstoxCheck: (symbol) => call("GET", "/api/upstox/check?" + q({ symbol })),
 
   strategies: () => call("GET", "/api/strategies"),
   reload: () => call("POST", "/api/strategies/reload"),
@@ -46,6 +46,7 @@ export const api = {
 
   // research: optimizer, universe test, developer mode
   optimizeCount: (b) => call("POST", "/api/research/optimize/count", b),
+  optimizeTimeframes: (b) => call("POST", "/api/research/timeframes", b),
   optimize: (b) => call("POST", "/api/research/optimize", b),
   universe: (b) => call("POST", "/api/research/universe", b),
   devBacktest: (b) => call("POST", "/api/dev/backtest", b),

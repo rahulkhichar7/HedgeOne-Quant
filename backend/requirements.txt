@@ -14,5 +14,4 @@ pydantic>=2.7
 # --- data
 pyarrow>=17          # Parquet candle store
 requests>=2.31       # Delta Exchange India + CoinDCX REST
-fyers-apiv3>=3.1     # Fyers historical data
 python-dotenv>=1.0   # backend/.env secrets

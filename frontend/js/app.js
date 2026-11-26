@@ -635,7 +635,7 @@ function showDataTab(t) {
   $$("#dataTabs button").forEach((b) => b.classList.toggle("active", b.dataset.dtab === t));
   $$("[data-dpanel]").forEach((p) => p.classList.toggle("active", p.dataset.dpanel === t));
   if (t === "stored") loadStored();
-  if (t === "fyers") loadFyers();
+  if (t === "upstox") loadUpstox();
   $("#dataModal .modal-box").classList.toggle("bulk-open", t === "bulk");
   if (t === "bulk") loadBulk();
 }
@@ -743,8 +743,8 @@ function renderBulk() {
     Object.entries(groups).map(([src, list]) => {
       const info = SOURCES[src];
       return `<tr class="grp"><td colspan="7">${esc(info.label)} · ${list.length}
-          ${src === "fyers" ? `<span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400;margin-left:6px" title="Earlier start dates are moved to the earliest allowed day automatically">Standard plan: intraday 1 yr · daily 5 yrs back</span>` : ""}
-          ${info.ready ? "" : `<span class="srcwarn">⚠ ${esc(info.message || "not ready")}${info.login ? ` — <a href="#" data-fylogin>log in</a>` : ""}</span>`}
+          ${src === "upstox" ? `<span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400;margin-left:6px" title="Earlier start dates are moved to the earliest available day automatically">history: minutes / hours from Jan 2022 · daily from 2000</span>` : ""}
+          ${info.ready ? "" : `<span class="srcwarn">⚠ ${esc(info.message || "not ready")}${src === "upstox" ? ` — <a href="#" data-uplink>Upstox tab</a>` : ""}</span>`}
           <button class="btn ghost sm" data-ga="${src}">select all</button><button class="btn ghost sm" data-gn="${src}">none</button></td></tr>` +
         list.map((s) => {
           const r = bulkRow(s), st = storedFor(s.name, r.interval);
@@ -770,7 +770,7 @@ function renderBulk() {
   const inGroup = (src) => bulkSymbols().filter((s) => s.source === src);
   $$("#bkTable [data-ga]").forEach((b) => b.onclick = () => { if (!running) { inGroup(b.dataset.ga).forEach((s) => { BULK.rows[s.name].on = true; }); saveBulk(); renderBulk(); } });
   $$("#bkTable [data-gn]").forEach((b) => b.onclick = () => { if (!running) { inGroup(b.dataset.gn).forEach((s) => { BULK.rows[s.name].on = false; }); saveBulk(); renderBulk(); } });
-  $$("#bkTable [data-fylogin]").forEach((a) => a.onclick = (e) => { e.preventDefault(); showDataTab("fyers"); });
+  $$("#bkTable [data-uplink]").forEach((a) => a.onclick = (e) => { e.preventDefault(); showDataTab("upstox"); });
   bulkCount();
 }
 
@@ -779,7 +779,18 @@ function bulkCount() {
   const sel = bulkSelected();
   const notReady = sel.filter((s) => !SOURCES[s.source].ready).length;
   const running = !!BULK.job;
-  $("#bkCount").innerHTML = running ? `Downloading… <b>${BULK.done || 0}</b> of ${BULK.items.length} finished` :
+  const perSource = () => {
+    const g = {};
+    BULK.items.forEach((it) => {
+      const src = (S.symbols.find((x) => x.name === it.symbol) || {}).source || "?";
+      const st = (BULK.state[it.symbol] || {}).cls;
+      const x = (g[src] = g[src] || { run: 0, done: 0, n: 0 });
+      x.n++; if (st === "run") x.run++; if (st === "ok" || st === "err") x.done++;
+    });
+    return Object.entries(g).map(([src, x]) => `<span title="each source has its own queue; they run in parallel">${esc((SOURCES[src] || {}).label || src)}: ` +
+      `${x.run ? `<b>${x.run}</b> running · ` : ""}${x.done}/${x.n} done</span>`).join(" &nbsp;|&nbsp; ");
+  };
+  $("#bkCount").innerHTML = running ? `Downloading… <b>${BULK.done || 0}</b> of ${BULK.items.length} finished &nbsp;—&nbsp; ${perSource()}` :
     `<b>${sel.length}</b> selected` + (notReady ? ` · <span class="neg">${notReady} from a source that isn't ready</span> (they'll fail — log in first)` : "");
   $("#bkGo").disabled = running || !sel.length;
   ["#bkApply", "#bkFill"].forEach((id) => { $(id).disabled = running; });
@@ -893,22 +904,47 @@ $("#asGo").onclick = async () => {
     await refreshSymbols(); fillDataForms();
   } catch (e) { $("#asStatus").innerHTML = `<span class="neg">${esc(e.message)}</span>`; }
 };
-async function loadFyers() {
-  const s = (await api.sources().catch(() => ({}))).fyers;
-  $("#fyStatus").innerHTML = s ? (s.ready ? `<span class="pos">● ${esc(s.message)}</span>` : `<span class="neg">● ${esc(s.message)}</span>`) : "";
+/* ---------------- Upstox: token status, connection test, instrument search ---------------- */
+async function loadUpstox() {
+  const st = (await api.sources().catch(() => ({}))).upstox;
+  $("#upStatus").innerHTML = st ? (st.ready ? `<span class="pos">● ${esc(st.message)}</span>` : `<span class="neg">● ${esc(st.message)}</span>`) : "";
 }
-$("#fyLogin").onclick = async () => { try { const { url } = await api.fyersUrl(); window.open(url, "_blank"); } catch (e) { toast(e.message, "error"); } };
-$("#fyGo").onclick = async () => {
-  const b = $("#fyGo"); b.disabled = true;
+$("#upCheck").onclick = async () => {
+  const b = $("#upCheck"); b.disabled = true;
+  $("#upCheckOut").textContent = "Checking…";
   try {
-    await api.fyersToken($("#fyCode").value.trim());
-    toast("Fyers token saved — you're logged in for today.", "ok");
-    $("#fyCode").value = "";
-    loadFyers();
-    SOURCES = await api.sources().catch(() => SOURCES);
+    const r = await api.upstoxCheck("NSE:RELIANCE");
+    $("#upCheckOut").innerHTML = `<span class="pos">✓ Connected.</span> ${esc(r.symbol)} → <code>${esc(r.instrument_key)}</code> · last daily close ${esc(r.close)} on ${esc((r.last || "").slice(0, 10))}`;
   } catch (e) {
-    toast(/auth|code|expired|invalid/i.test(e.message) ? e.message + " — the auth_code is single-use and expires within minutes: log in again and paste the new URL." : e.message, "error", false, 12000);
+    $("#upCheckOut").innerHTML = `<span class="neg">✗ ${esc(e.message)}</span>`;
   } finally { b.disabled = false; }
+};
+let upTimer = null;
+$("#upQuery").oninput = () => {
+  clearTimeout(upTimer);
+  upTimer = setTimeout(async () => {
+    const q = $("#upQuery").value.trim();
+    if (q.length < 2) { $("#upResults").innerHTML = ""; return; }
+    try {
+      const { results } = await api.upstoxSearch(q);
+      const have = new Set(S.symbols.filter((x) => x.source === "upstox").map((x) => x.symbol.toUpperCase()));
+      $("#upResults").innerHTML = `<thead><tr><th>Name</th><th>Symbol for the catalog</th><th>Upstox key</th><th></th></tr></thead><tbody>` +
+        (results.map((r, i) => `<tr><td><b>${esc(r.name)}</b> <span class="tag">${esc(r.segment)}</span></td><td><code>${esc(r.symbol)}</code></td>
+          <td class="muted">${esc(r.instrument_key)}</td>
+          <td>${have.has(r.symbol.toUpperCase()) ? `<span class="muted">in catalog</span>` : `<button class="btn sm" data-upadd="${i}">Add</button>`}</td></tr>`).join("")
+          || `<tr><td colspan="4" class="muted">No match.</td></tr>`) + `</tbody>`;
+      $$("#upResults [data-upadd]").forEach((btn) => btn.onclick = async () => {
+        const r = results[+btn.dataset.upadd];
+        try {
+          await api.addSymbol({ name: r.name.toUpperCase(), source: "upstox", symbol: r.symbol, market: "NSE" });
+          btn.replaceWith(Object.assign(document.createElement("span"), { className: "pos", textContent: "✓ added" }));
+          await refreshSymbols();
+        } catch (e) { toast(e.message, "error"); }
+      });
+    } catch (e) {
+      $("#upResults").innerHTML = `<tbody><tr><td class="neg">${esc(e.message)}</td></tr></tbody>`;
+    }
+  }, 300);
 };
 
 /* =====================================================================
@@ -1193,6 +1229,49 @@ function readGrid(def) {
   return grid;
 }
 
+/* timeframe (candle size) row: tested like one more parameter */
+let TF = null;
+async function loadTimeframeRow(def, cfg) {
+  const host = $("#optTf");
+  host.innerHTML = `<td class="pn">timeframe<small>candle size</small></td><td></td><td><span class="muted">checking…</span></td><td class="n"></td>`;
+  try {
+    TF = await api.optimizeTimeframes({ ...rangeParams(), strategy: def.name, params: S.params[def.name] || {} });
+  } catch (e) {
+    TF = null;
+    host.innerHTML = `<td class="pn">timeframe</td><td></td><td class="muted">${esc(e.message)}</td><td></td>`;
+    return;
+  }
+  const allowed = TF.allowed, cur = S.interval;
+  const saved = (cfg.intervals || []).filter((x) => allowed.includes(x));
+  const mode = TF.fixed || allowed.length < 2 ? "fixed" : (cfg.tfMode || "fixed");
+  const blocked = Object.entries(TF.blocked);
+  const note = `<span class="muted small" title="${esc(blocked.map(([k, v]) => `${k}: ${v}`).join("\n"))}">${esc(TF.mode)}${blocked.length ? ` · ${blocked.length} hidden (hover)` : ""}</span>`;
+  host.innerHTML = `<td class="pn">timeframe<small>chart: ${esc(cur)}</small></td>
+    <td><select class="om-tf" ${TF.fixed || allowed.length < 2 ? "disabled" : ""}><option value="fixed" ${mode === "fixed" ? "selected" : ""}>Fixed</option>
+      <option value="list" ${mode === "list" ? "selected" : ""}>List</option></select></td>
+    <td><div class="vals tfvals"></div>${note}</td><td class="n" data-n-tf></td>`;
+  const draw = (m) => {
+    const sel = new Set(saved.length ? saved : [cur].filter((x) => allowed.includes(x)));
+    $(".tfvals", host).innerHTML = m === "list"
+      ? allowed.map((iv) => `<label><input type="checkbox" data-tfv="${iv}" ${sel.has(iv) ? "checked" : ""}>${iv}</label>`).join("") +
+        `<button class="btn ghost sm" data-tfall>all</button>`
+      : `<span>${esc(cur)} <span class="muted">(the chart's interval)</span></span>`;
+    const all = $("[data-tfall]", host);
+    if (all) all.onclick = () => { $$("[data-tfv]", host).forEach((c) => { c.checked = true; }); countCombos(def); };
+  };
+  draw(mode);
+  $(".om-tf", host).onchange = (e) => { draw(e.target.value); countCombos(def); };
+  host.onchange = () => countCombos(def);
+}
+function readTimeframes() {
+  const m = $("#optTf .om-tf");
+  if (!m || m.value !== "list") return { mode: "fixed", intervals: [] };
+  const iv = $$("#optTf [data-tfv]").filter((c) => c.checked).map((c) => c.dataset.tfv);
+  const n = $("#optTf [data-n-tf]");
+  if (n) n.textContent = `×${iv.length}`;
+  return { mode: "list", intervals: iv };
+}
+
 let optTimer = null;
 function openOptimizer() {
   const def = S.strategies.find((x) => x.name === S.strategy);
@@ -1204,8 +1283,9 @@ function openOptimizer() {
   $("#optWhere").innerHTML = `On <b>${esc(S.symbol)}</b> · ${esc(S.interval)} · ${esc(rp.start || "first bar")} → ${esc((rp.end || "last bar").slice(0, 10))}
     ${S.dev.on ? `<span class="dv-tag train">train period only</span>` : ""} — every combination is a full backtest with your current backtest settings (costs, fills, stops).`;
   $("#optGrid").innerHTML = `<thead><tr><th>Parameter</th><th>Test</th><th>Values</th><th></th></tr></thead><tbody>` +
+    `<tr id="optTf" class="tfrow"></tr>` +
     def.params.map((p) => optRow(p, cur[p.name], cfg.grid && cfg.grid[p.name])).join("") + `</tbody>`;
-  if (!def.params.length) $("#optGrid").innerHTML = `<tr><td class="muted">This strategy has no parameters to optimize.</td></tr>`;
+  loadTimeframeRow(def, cfg).then(() => countCombos(def));
   $("#optObj").innerHTML = OBJECTIVES.map(([k, l]) => `<option value="${k}" ${k === (cfg.objective || "sharpe") ? "selected" : ""}>${l}</option>`).join("");
   $("#optMin").value = cfg.min_trades ?? 5;
   $("#optCons").value = cfg.constraint || "";
@@ -1227,9 +1307,13 @@ async function countCombos(def) {
   const box = $("#optCount");
   const grid = readGrid(def);
   try {
-    const r = await api.optimizeCount({ ...rangeParams(), strategy: def.name, grid, constraint: $("#optCons").value || null });
+    const tf = readTimeframes();
+    if (tf.mode === "list" && !tf.intervals.length) throw new Error("Tick at least one timeframe.");
+    const r = await api.optimizeCount({ ...rangeParams(), strategy: def.name, grid, constraint: $("#optCons").value || null, intervals: tf.intervals });
     box.className = "grow " + (r.combos > 3000 ? "warn" : "muted");
-    box.innerHTML = `<b>${r.combos.toLocaleString()}</b> combination${r.combos === 1 ? "" : "s"}${r.dropped ? ` (${r.dropped.toLocaleString()} removed by the constraint)` : ""}` +
+    box.innerHTML = `<b>${r.combos.toLocaleString()}</b> combination${r.combos === 1 ? "" : "s"}` +
+      (r.timeframes.length > 1 ? ` (${r.per_timeframe.toLocaleString()} × ${r.timeframes.length} timeframes)` : "") +
+      `${r.dropped ? ` · ${r.dropped.toLocaleString()} removed by the constraint` : ""}` +
       (r.combos > 3000 ? " — this can take a few minutes" : "");
     $("#optGo").disabled = r.combos < 1;
   } catch (e) {
@@ -1240,11 +1324,15 @@ async function countCombos(def) {
 
 async function runOptimizer(def) {
   const grid = readGrid(def);
-  const cfg = { grid, objective: $("#optObj").value, min_trades: +$("#optMin").value || 0, constraint: $("#optCons").value.trim() || null };
+  const tf = readTimeframes();
+  const cfg = { grid, objective: $("#optObj").value, min_trades: +$("#optMin").value || 0, constraint: $("#optCons").value.trim() || null,
+    intervals: tf.intervals, tfMode: tf.mode };
   const w = window.open("", "_blank");
   if (w) w.document.write(`<p style="font:14px sans-serif;padding:40px">Starting the optimization…</p>`);
   try {
-    const r = await api.optimize({ ...rangeParams(), strategy: def.name, settings: S.settings, ...cfg,
+    const { tfMode, ...body } = cfg;
+    void tfMode;
+    const r = await api.optimize({ ...rangeParams(), strategy: def.name, settings: S.settings, ...body,
       context: S.dev.on ? { dev: true, train: { start: S.dev.trainStart, end: S.dev.trainEnd } } : {} });
     S.optCfg[def.name] = cfg; persist();
     if (w) w.location.href = r.page; else window.open(r.page, "_blank");
@@ -1336,8 +1424,22 @@ function useParams(raw) {
   let d;
   try { d = JSON.parse(raw); } catch (e) { return; }
   if (!d || !d.strategy || !S.strategies.find((x) => x.name === d.strategy)) return;
+  const params = { ...d.params };
+  let tfSwitch = null;
+  if (d.tfKey && params[d.tfKey]) {                 // the optimizer also tested the candle size
+    tfSwitch = params[d.tfKey];
+    delete params[d.tfKey];
+  }
+  d.params = params;
   S.strategy = d.strategy;
-  S.params[d.strategy] = { ...(S.params[d.strategy] || {}), ...d.params };
+  S.params[d.strategy] = { ...(S.params[d.strategy] || {}), ...params };
+  if (tfSwitch && tfSwitch !== S.interval && (!d.symbol || d.symbol === S.symbol)) {
+    S.interval = tfSwitch;
+    renderIntervals();
+    reload();
+    toast(`Chart switched to <b>${esc(tfSwitch)}</b> — the timeframe of these parameters.`, "ok", true, 8000);
+  }
+  if (tfSwitch) d.interval = tfSwitch;
   persist();
   renderStrategyList($("#stratSearch").value);
   renderStrategyDetail();

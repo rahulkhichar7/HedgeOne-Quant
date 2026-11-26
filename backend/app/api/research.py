@@ -27,6 +27,16 @@ class OptimizeReq(BaseModel):
     min_trades: int = 5
     constraint: str | None = Field(None, description='optional Python expression, e.g. "fast < slow"')
     context: dict = Field(default_factory=dict)          # e.g. {"dev": true, "train": {...}}
+    intervals: list[str] = Field(default_factory=list, description="timeframes to test; empty = the chart's interval")
+
+
+class TimeframeReq(BaseModel):
+    symbol: str
+    interval: str = "15m"
+    start: str | None = None
+    end: str | None = None
+    strategy: str
+    params: dict = Field(default_factory=dict)
 
 
 class UniverseReq(BaseModel):
@@ -59,8 +69,17 @@ def optimize_count(req: OptimizeReq):
     """How many combinations a grid produces (the UI shows it live)."""
     try:
         spec = research.get_strategy(req.strategy)
-        values, combos, dropped = research.expand_grid(spec, req.grid, req.constraint)
-        return {"combos": len(combos), "dropped": dropped, "values": values, "limit": research.MAX_COMBOS}
+        return {**research.count_combos(spec, req.grid, req.constraint, req.intervals, req.interval),
+                "limit": research.MAX_COMBOS}
+    except Exception as e:  # noqa: BLE001
+        fail(e)
+
+
+@router.post("/research/timeframes")
+def timeframes(req: TimeframeReq):
+    """Which candle sizes the optimizer may test for this strategy + symbol (allowed and buildable)."""
+    try:
+        return research.timeframe_options(req.symbol, req.strategy, req.interval, req.start, req.end, req.params)
     except Exception as e:  # noqa: BLE001
         fail(e)
 
@@ -69,12 +88,12 @@ def optimize_count(req: OptimizeReq):
 def optimize(req: OptimizeReq):
     """Starts a background job; poll /api/jobs/{job}. The result holds the report url."""
     try:
-        research.get_strategy(req.strategy)
-        research.expand_grid(research.get_strategy(req.strategy), req.grid, req.constraint)  # validate now
+        research.count_combos(research.get_strategy(req.strategy), req.grid, req.constraint,
+                              req.intervals, req.interval)                                     # validate now
     except Exception as e:  # noqa: BLE001
         fail(e)
     jid = store.start_job(research.optimize, req.symbol, req.interval, req.start, req.end, req.strategy, req.grid,
-                          req.settings, req.objective, req.min_trades, req.constraint, req.context)
+                          req.settings, req.objective, req.min_trades, req.constraint, req.context, req.intervals)
     return {"job": jid, "page": f"/optimize.html?job={jid}"}
 
 

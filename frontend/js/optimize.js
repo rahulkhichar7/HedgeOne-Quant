@@ -2,14 +2,16 @@
    Parameter optimization report:  /optimize.html?id=<id>   (or ?job=<job> while it runs)
    ===================================================================== */
 import { fmtNum } from "./chart.js";
-import { catLines, heatGrid, histogram, labelScatter } from "./svg.js";
+import { catLines, hbars, heatGrid, histogram, labelScatter } from "./svg.js";
 import { $, $$, esc, fmtMetric, highlightPy, insightCards, kpiCards, metricTables } from "./ui.js";
 import { STANDALONE, TimeChart, bindToolbar, copyText, costsNote, flash, loadReport, paramChips, section, sendToTerminal, showError, sortableTable } from "./research.js";
 
 const host = $("#report");
 let P = null, theme = "light";
 const charts = [];
-const st = { hx: null, hy: null, metric: null, agg: "best", limit: 100, eligibleOnly: true };
+const st = { hx: null, hy: null, metric: null, agg: "best", limit: 100, eligibleOnly: true, lb: null };
+const TFC = ["#2962ff", "#ff9800", "#00bcd4", "#e040fb", "#66bb6a", "#ef5350", "#8d6e63", "#ffd600", "#7e57c2", "#26c6da", "#ff4081", "#9ccc65", "#5c6bc0", "#a1887f", "#4db6ac"];
+const send = (r) => sendToTerminal(P.meta.strategy, r.params, { symbol: P.meta.symbol, interval: r.interval || P.meta.interval, tfKey: P.meta.tf_key });
 
 const CENTER = { win_rate: 50, profit_factor: 1, max_dd: -1e9, trades: -1e9, exposure: -1e9 };
 const fmtOf = (key) => (P.metric_defs.find((d) => d.key === key) || { fmt: "ratio" }).fmt;
@@ -34,7 +36,7 @@ function render() {
       <div class="hero-l">
         <div class="eyebrow">${esc(m.category)} · parameter optimization ${dev ? `<span class="badge dev">Developer mode · train period only</span>` : ""}</div>
         <h1>${esc(m.strategy)}</h1>
-        <div class="sub">${esc(m.symbol)} · ${esc(m.interval)} · ${esc(m.start.slice(0, 16))} → ${esc(m.end.slice(0, 16))} · ${m.bars.toLocaleString()} bars</div>
+        <div class="sub">${esc(m.symbol)} · ${m.tf_key ? `timeframes ${esc(m.timeframes.join(", "))} (best <b>${esc(m.interval)}</b>)` : esc(m.interval)} · ${esc(m.start.slice(0, 16))} → ${esc(m.end.slice(0, 16))} · ${m.bars.toLocaleString()} bars${m.tf_key ? ` at ${esc(m.interval)}` : ""}</div>
         <div class="sub">${m.tested.toLocaleString()} combinations tested${m.failed ? ` · ${m.failed} failed` : ""}${m.dropped_by_constraint ? ` · ${m.dropped_by_constraint} removed by constraint <code>${esc(m.constraint)}</code>` : ""}
           · ranked by <b>${esc(m.objective_label)}</b> (min ${m.min_trades} trades) · ${(m.elapsed_ms / 1000).toFixed(1)}s</div>
         ${Object.keys(fixed).length ? `<div class="chips"><span class="muted small">Fixed:</span> ${paramChips(fixed)}</div>` : ""}
@@ -87,6 +89,14 @@ function render() {
     ${m.varying.length ? section("Sensitivity — one parameter at a time", `<div class="chartgrid" id="sens"></div>
       <p class="note">For each tested value: the best and the average <span id="sensMetric"></span> over all other parameter values. A flat, high line means the parameter barely matters (good); a sharp spike means fragile.</p>`) : ""}
 
+    ${m.tf_key ? section("By timeframe", `<div class="chartgrid"><div><h3>Best ${esc(m.objective_label)} per timeframe</h3><div id="tfBars"></div></div>
+        <div><h3>Lookback in time <span class="muted small">same idea, different candle sizes</span></h3>
+          <div class="ctrl screen-only" id="lbCtrl"></div><div id="lbPlot"></div><div id="lbLegend" class="chips"></div></div></div>
+      <div class="tablewrap" style="margin-top:12px"><table class="tbl" id="tfTable"></table></div>
+      <p class="note">Parameters count candles, so EMA 20 on 15m (5 hours) and EMA 5 on 1h (5 hours) look at similar history. In "Lookback in time" each
+        point is one combination placed at <i>parameter × candle size</i> — if the good results line up at the same time span across timeframes,
+        that span is the real edge, whichever candle size you trade it on.</p>`) : ""}
+
     ${section("Top equity curves", `<div id="topEq" class="tchart"></div>
       <p class="note">The 10 best eligible combinations (% return) — similar curves mean the result doesn't depend on exact values.</p>`)}
 
@@ -114,15 +124,51 @@ function render() {
   `;
 
   const use = $("#useBest");
-  if (use) use.onclick = () => { if (sendToTerminal(m.strategy, best.params, { symbol: m.symbol, interval: m.interval })) flash(use, "✓ Sent to terminal"); };
+  if (use) use.onclick = () => { if (send(best)) flash(use, "✓ Sent to terminal"); };
   $("#copyBest").onclick = (e) => copyText(JSON.stringify(best.params)).then(() => flash(e.target, "✓ Copied"));
-  ["hx", "hy", "hm", "ha"].forEach((id) => { const el = $("#" + id); if (el) el.onchange = () => { st.hx = $("#hx")?.value || st.hx; st.hy = $("#hy")?.value || st.hy; st.metric = $("#hm").value; st.agg = $("#ha")?.value || st.agg; st.cell = null; drawLandscape(); drawTable(); }; });
+  ["hx", "hy", "hm", "ha"].forEach((id) => { const el = $("#" + id); if (el) el.onchange = () => { st.hx = $("#hx")?.value || st.hx; st.hy = $("#hy")?.value || st.hy; st.metric = $("#hm").value; st.agg = $("#ha")?.value || st.agg; st.cell = null; drawLandscape(); drawTable(); if (P.meta.tf_key) drawTimeframes(); }; });
   $("#elig").onchange = (e) => { st.eligibleOnly = e.target.checked; drawTable(); };
   $("#lim").onchange = (e) => { st.limit = +e.target.value; drawTable(); };
   drawLandscape();
   drawSvgs();
   drawCharts();
   drawTable();
+  if (m.tf_key) drawTimeframes();
+}
+
+/* ---------------- timeframe views */
+function drawTimeframes() {
+  const m = P.meta, obj = m.objective, f = fmtOf(obj), bt = P.by_timeframe || [];
+  const col = (iv) => TFC[m.timeframes.indexOf(iv) % TFC.length];
+  hbars($("#tfBars"), bt.filter((x) => x.best).map((x) => ({ label: `${x.interval} (${x.best.trades} trades)`, values: [x.best[obj]],
+    color: x.interval === m.interval ? "#2962ff" : null })), { fmt: (v) => short(v, f), center: (CENTER[obj] ?? 0) < -1e8 ? 0 : (CENTER[obj] ?? 0) });
+  sortableTable($("#tfTable"), bt, [
+    { key: "interval", label: "Timeframe", sort: (x) => m.timeframes.indexOf(x.interval), fmt: (x) => `<b>${esc(x.interval)}</b>${x.interval === m.interval ? " ★" : ""}` },
+    { key: "obj", label: "Best " + esc(m.objective_label), cls: "num", sort: (x) => x.best && x.best[obj], fmt: (x) => x.best ? fmtMetric(x.best[obj], f) : "—" },
+    { key: "ret", label: "Its return", cls: "num", sort: (x) => x.best && x.best.total_return, fmt: (x) => x.best ? `<span class="${(x.best.total_return ?? 0) >= 0 ? "pos" : "neg"}">${fmtMetric(x.best.total_return, "pct")}</span>` : "—" },
+    { key: "trades", label: "Trades", cls: "num", sort: (x) => x.best && x.best.trades, fmt: (x) => x.best ? x.best.trades : "—" },
+    { key: "params", label: "Best parameters", nosort: true, fmt: (x) => x.best ? esc(Object.entries(x.best.params).filter(([k]) => k !== m.tf_key && m.varying.includes(k)).map(([k, v]) => `${k}=${v}`).join(", ")) : "—" },
+    { key: "profitable", label: "% profitable", cls: "num", fmt: (x) => fmtMetric(x.profitable, "pct") },
+    { key: "bh", label: "Buy & hold", cls: "num", fmt: (x) => fmtMetric(x.buy_hold, "pct") },
+    { key: "bars", label: "Bars", cls: "num", fmt: (x) => x.bars.toLocaleString() },
+    { key: "span", label: "Period", nosort: true, fmt: (x) => `${esc(x.start.slice(0, 10))} → ${esc(x.end.slice(0, 10))}` },
+    { key: "base", label: "Built from", nosort: true, fmt: (x) => esc(x.built_from) },
+    ...(STANDALONE ? [] : [{ key: "use", label: "", nosort: true, fmt: (x) => x.best ? `<button class="btn sm" data-tfuse="${x.best.rank}">Use</button>` : "" }]),
+  ], { onRender: (el) => $$("[data-tfuse]", el).forEach((b) => b.onclick = () => { const r = P.rows.find((y) => y.rank === +b.dataset.tfuse); if (r && send(r)) flash(b, "✓"); }) });
+  // lookback in time: numeric parameters only
+  const nums = m.varying.filter((k) => k !== m.tf_key && P.rows.some((r) => typeof r.params[k] === "number" && !Number.isNaN(r.params[k])));
+  const lbBox = $("#lbPlot");
+  if (!nums.length) { lbBox.innerHTML = `<p class="muted">Vary a numeric parameter (e.g. a length) to see this view.</p>`; return; }
+  st.lb = st.lb && nums.includes(st.lb) ? st.lb : nums[0];
+  $("#lbCtrl").innerHTML = `<label>Parameter <select id="lbSel">${nums.map((k) => `<option ${k === st.lb ? "selected" : ""}>${esc(k)}</option>`).join("")}</select></label>
+    <span class="muted small">y = ${esc(labelOf(st.metric || obj))}</span>`;
+  $("#lbSel").onchange = (e) => { st.lb = e.target.value; drawTimeframes(); };
+  const metric = st.metric || obj;
+  const rows = P.rows.filter((r) => r.eligible).slice(0, 1500);
+  const hrs = (v) => (v >= 48 ? (v / 24).toFixed(v >= 240 ? 0 : 1) + "d" : v >= 1 ? v.toFixed(v >= 10 ? 0 : 1) + "h" : Math.round(v * 60) + "m");
+  labelScatter(lbBox, rows.map((r) => ({ x: Math.log10(r.params[st.lb] * m.tf_minutes[r.interval] / 60), y: r[metric], color: col(r.interval), big: r.rank === 1 })),
+    { xLabel: `${st.lb} × candle size (log scale)`, yLabel: labelOf(metric), xFmt: (v) => hrs(Math.pow(10, v)), yFmt: (v) => short(v, fmtOf(metric)) });
+  $("#lbLegend").innerHTML = m.timeframes.map((iv) => `<span class="chip"><i class="sw" style="background:${col(iv)};width:10px;height:10px;display:inline-block;border-radius:2px;margin-right:4px"></i>${esc(iv)}</span>`).join("");
 }
 
 function statRows(best) {
@@ -219,7 +265,7 @@ function drawCharts() {
   const COLORS = ["#2962ff", "#ff9800", "#e040fb", "#00bcd4", "#8d6e63", "#ff4081", "#66bb6a", "#7e57c2", "#26c6da", "#ef5350"];
   const t = P.curves.t;
   top.set([
-    ...P.curves.top.map((c, i) => ({ id: "c" + i, name: `#${c.rank} ` + m.varying.map((k) => `${k}=${c.params[k]}`).join(" "), color: COLORS[i % 10], width: i === 0 ? 2.4 : 1.3, t, v: c.values })),
+    ...P.curves.top.map((c, i) => ({ id: "c" + i, name: `#${c.rank} ` + m.varying.map((k) => `${k}=${c.params[k]}`).join(" "), color: COLORS[i % 10], width: i === 0 ? 2.4 : 1.3, t: c.t || t, v: c.values })),
     { id: "bh", name: "Buy & hold", color: "#9598a1", dashed: true, t: P.best.series.t, v: P.best.series.benchmark.map((v) => v === null ? null : (v / init) * 100 - 100) },
   ]);
   const be = new TimeChart($("#bestEq"), { theme });
@@ -257,7 +303,7 @@ function drawTable() {
     rowAttrs: (r) => `class="${r.rank === 1 ? "best" : ""} ${r.eligible ? "" : "inel"}"`,
     onRender: (el) => $$("[data-use]", el).forEach((b) => b.onclick = () => {
       const r = P.rows.find((x) => x.rank === +b.dataset.use);
-      if (r && sendToTerminal(m.strategy, r.params, { symbol: m.symbol, interval: m.interval })) flash(b, "✓");
+      if (r && send(r)) flash(b, "✓");
     }),
   });
 }

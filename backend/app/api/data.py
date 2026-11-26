@@ -1,7 +1,7 @@
-"""Market-data routes: catalog, downloads, CSV import, candles, Fyers login."""
+"""Market-data routes: catalog, downloads, CSV import, candles, Upstox search / check."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -46,9 +46,6 @@ class SymbolReq(BaseModel):
     symbol: str
     market: str = "NSE"
 
-
-class AuthReq(BaseModel):
-    auth_code: str
 
 
 @router.get("/symbols")
@@ -140,17 +137,24 @@ def candles(symbol: str, interval: str = "15m", start: str | None = None, end: s
         fail(e)
 
 
-@router.get("/fyers/login-url")
-def fyers_login_url():
+@router.get("/upstox/search")
+def upstox_search(q: str, limit: int = 25):
+    """Find NSE/BSE stocks and indices by name or trading symbol (Upstox instrument list)."""
     try:
-        return {"url": SOURCES["fyers"].login_url()}
+        return {"results": SOURCES["upstox"].search(q, int(limit))}
     except Exception as e:  # noqa: BLE001
         fail(e)
 
 
-@router.post("/fyers/token")
-def fyers_token(req: AuthReq):
+@router.get("/upstox/check")
+def upstox_check(symbol: str = "NSE:RELIANCE"):
+    """Token + connection test: fetches the last few daily candles of one instrument."""
     try:
-        return SOURCES["fyers"].set_auth_code(req.auth_code)
+        src = SOURCES["upstox"]
+        key = src.instrument_key(symbol)
+        end = datetime.now()
+        df = src.fetch(symbol, "1d", end - timedelta(days=10), end)
+        return {"ok": True, "symbol": symbol, "instrument_key": key, "candles": len(df),
+                "last": str(df.index[-1]) if len(df) else None, "close": float(df.close.iloc[-1]) if len(df) else None}
     except Exception as e:  # noqa: BLE001
         fail(e)

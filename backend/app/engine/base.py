@@ -105,6 +105,7 @@ class Spec:
     kind: str                      # "strategy" | "indicator"
     overlay: bool = True           # indicators only: draw on price or own pane
     levels: list[float] = field(default_factory=list)
+    timeframes: Any = None         # strategies only: which chart intervals it may run on (see strategy())
 
     def resolve(self, given: dict | None) -> dict:
         given = given or {}
@@ -133,13 +134,48 @@ def _doc(func) -> str:
     return inspect.cleandoc(func.__doc__ or "").split("\n\n")[0]
 
 
-def strategy(name: str, category: str = "Custom", description: str = "", **params):
-    """Register a strategy. Keyword args become UI parameters (plain values or Param)."""
+def strategy(name: str, category: str = "Custom", description: str = "", timeframes=None, **params):
+    """Register a strategy. Keyword args become UI parameters (plain values or Param).
+
+    timeframes — which chart intervals (candle sizes) the strategy may run on; the optimizer
+    can then test the interval like a parameter:
+        None (default)   work it out automatically: any interval, narrowed by what the strategy uses
+                         (htf(df, "1d", …) → only intervals below 1d; between_time / first_bar_of_day /
+                         last_bar_of_day → intraday only; load(other, "1h") → 1h or finer)
+        "any"            every interval
+        "intraday"       intervals below 1 day
+        "fixed"          never optimize the interval (only the chart's interval is used)
+        ("5m", "1h")     a range, both ends included
+        ["5m", "15m"]    exactly these
+    """
     def deco(func):
         STRATEGIES[name] = Spec(name, func, {k: _as_param(v) for k, v in params.items()},
-                                category, description or _doc(func), "strategy")
+                                category, description or _doc(func), "strategy", timeframes=timeframes)
         return func
     return deco
+
+
+# ---------------------------------------------------------------- timeframe usage recorder
+# While a strategy runs inside `record_usage()`, the helpers below note what it relies on, so the
+# optimizer knows which base intervals make sense (e.g. a daily filter needs candles below 1 day).
+_USAGE: list | None = None
+
+
+class record_usage:
+    def __enter__(self):
+        global _USAGE
+        self.prev, _USAGE = _USAGE, []
+        return _USAGE
+
+    def __exit__(self, *exc):
+        global _USAGE
+        _USAGE = self.prev
+        return False
+
+
+def _note(kind: str, value=None):
+    if _USAGE is not None:
+        _USAGE.append((kind, value))
 
 
 def indicator(name: str, category: str = "Other", overlay: bool = True, levels: list | None = None,
@@ -213,6 +249,7 @@ def state_to_events(entry_state: pd.Series, exit_state: pd.Series | None = None)
 # ---------------------------------------------------------------- time
 def between_time(df: pd.DataFrame, start: str, end: str) -> pd.Series:
     """True for bars whose time is within [start, end] e.g. ("09:30", "14:45")."""
+    _note("intraday", "between_time")
     t = df.index.hour * 60 + df.index.minute
     h1, m1 = map(int, start.split(":"))
     h2, m2 = map(int, end.split(":"))
@@ -220,6 +257,7 @@ def between_time(df: pd.DataFrame, start: str, end: str) -> pd.Series:
 
 
 def first_bar_of_day(df: pd.DataFrame) -> pd.Series:
+    _note("intraday", "first_bar_of_day")
     d = df.index.normalize()
     return pd.Series(d != np.roll(d, 1), index=df.index) | (pd.Series(np.arange(len(df)) == 0, index=df.index))
 
@@ -227,6 +265,7 @@ def first_bar_of_day(df: pd.DataFrame) -> pd.Series:
 def last_bar_of_day(df: pd.DataFrame) -> pd.Series:
     """True for the last bar of each session — decided by the CLOCK (bar end >= session close,
     or crossing midnight for 24h markets), so it never needs to peek at the next bar."""
+    _note("intraday", "last_bar_of_day")
     from .. import config
     from ..data.sources import interval_seconds
     iv = df.attrs.get("interval")
@@ -257,6 +296,7 @@ def htf(df: pd.DataFrame, interval: str, func: Callable[[pd.DataFrame], pd.Serie
     """
     from ..data.store import resample
     from .. import config
+    _note("htf", interval)
     market = config.MARKETS.get(df.attrs.get("market", "NSE"), config.MARKETS["NSE"])
     big = resample(df, interval, market)
     val = func(big).shift(1)
@@ -266,4 +306,5 @@ def htf(df: pd.DataFrame, interval: str, func: Callable[[pd.DataFrame], pd.Serie
 def load(symbol: str, interval: str | None = None, start=None, end=None) -> pd.DataFrame:
     """Load another symbol from the local store (e.g. NIFTY as a market filter)."""
     from ..data import store
+    _note("load", interval or "1d")
     return store.load(symbol, interval or "1d", start, end)

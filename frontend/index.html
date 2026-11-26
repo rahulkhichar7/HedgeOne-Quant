@@ -68,7 +68,7 @@
     <div id="tradeCard" class="trade-card hidden"></div>
     <div id="empty" class="empty hidden">
       <h3>No data yet</h3>
-      <p>Download candles for this symbol from <b>Fyers</b>, <b>Delta Exchange</b> or <b>CoinDCX</b>, or import an old CSV.</p>
+      <p>Download candles for this symbol from <b>Upstox</b>, <b>Delta Exchange</b> or <b>CoinDCX</b>, or import an old CSV.</p>
       <button class="btn primary" id="emptyData">Open data manager</button>
     </div>
   </section>
@@ -149,7 +149,7 @@
         <button data-dtab="stored">Stored</button>
         <button data-dtab="import">Import CSV</button>
         <button data-dtab="symbol">Add symbol</button>
-        <button data-dtab="fyers">Fyers login</button>
+        <button data-dtab="upstox">Upstox</button>
       </nav>
       <button class="btn ghost icon" data-close>×</button>
     </div>
@@ -185,8 +185,8 @@
           <button class="btn primary" id="bkGo">Start downloading</button>
         </div>
         <div class="pbar2 hidden" id="bkBar"><i></i></div>
-        <p class="hint">Downloads run one after another in the background (brokers rate-limit parallel requests) — one failure never stops the rest, and you can close this dialog.
-          Fyers requests are paced to stay under the Standard plan's 50 requests/minute: when the budget is used up, the queue waits and resumes by itself (shown in the Status column). Each row can have its own interval and period; the bar above sets them for all ticked rows at once.</p>
+        <p class="hint">Downloads run in the background with one queue per source — Upstox, Delta and CoinDCX download in parallel, each within its own request limit (each also fetches a few securities at once). One failure never stops the rest, and you can close this dialog.
+          Limits used: Upstox ≤ 80% of its limits (40/s, 400/min, 1,600 per 30 min), Delta ≤ 75% of its 5-minute quota, CoinDCX ≤ 8/s. When a budget is used up — or the exchange says "too many requests" — that queue waits and resumes by itself (shown in the Status column). Each row can have its own interval and period; the bar above sets them for all ticked rows at once.</p>
       </section>
       <section data-dpanel="stored">
         <div class="table-wrap"><table class="grid" id="storedTable"></table></div>
@@ -204,23 +204,22 @@
       <section data-dpanel="symbol">
         <div class="form-grid">
           <label>Display name<input id="asName" placeholder="ADANI ENTERPRISES"></label>
-          <label>Source<select id="asSource"><option value="fyers">Fyers</option><option value="delta">Delta Exchange India</option><option value="coindcx">CoinDCX</option><option value="csv">CSV only</option></select></label>
-          <label>Source symbol<input id="asSymbol" placeholder="NSE:ADANIENT-EQ  /  BTCUSD  /  B-BTC_USDT"></label>
+          <label>Source<select id="asSource"><option value="upstox">Upstox</option><option value="delta">Delta Exchange India</option><option value="coindcx">CoinDCX</option><option value="csv">CSV only</option></select></label>
+          <label>Source symbol<input id="asSymbol" placeholder="NSE:ADANIENT  /  NSE_INDEX:Nifty 50  /  BTCUSD  /  B-BTC_USDT"></label>
           <label>Market<select id="asMarket"><option>NSE</option><option>CRYPTO</option></select></label>
         </div>
         <div class="row"><button class="btn primary" id="asGo">Add to catalog</button><span id="asStatus" class="muted"></span></div>
       </section>
-      <section data-dpanel="fyers">
-        <p id="fyStatus" class="muted"></p>
-        <ol class="steps">
-          <li>Put <code>FYERS_CLIENT_ID</code> and <code>FYERS_SECRET_KEY</code> in <code>backend/.env</code> and restart.</li>
-          <li><button class="btn" id="fyLogin">Open Fyers login</button> — log in. Fyers then sends you to <code>https://127.0.0.1/?…auth_code=…</code>,
-            which shows <b>"This site can't be reached" / "timed out"</b> — that's expected (nothing runs at that address). Copy that page's full URL from the address bar.</li>
-          <li>Paste the URL (or just the auth_code) here:</li>
-        </ol>
-        <div class="row"><input id="fyCode" class="grow" placeholder="https://127.0.0.1/?s=ok&code=200&auth_code=…"><button class="btn primary" id="fyGo">Save token</button></div>
-        <p class="hint">Fyers tokens expire every day, so log in once each morning. The auth_code in the URL works only once and only for a few minutes — paste it soon after logging in.<br>
-          History limits on the Fyers <b>Standard</b> plan: intraday 1 year back, daily 5 years back (longer with FYERS Prime). Earlier start dates are moved to the earliest allowed day automatically.</p>
+      <section data-dpanel="upstox">
+        <div class="row" style="margin-top:0"><span id="upStatus" class="grow muted"></span>
+          <button class="btn" id="upCheck" title="Fetch the last few daily candles of Reliance to check the token">Test connection</button></div>
+        <div id="upCheckOut" class="hint"></div>
+        <h4 class="sub">Find a stock or index</h4>
+        <div class="row" style="margin-top:0"><input id="upQuery" class="grow" placeholder="Search by name or symbol — e.g. tata motors, HDFCBANK, nifty bank"></div>
+        <div class="table-wrap" style="max-height:38vh;margin-top:8px"><table class="grid" id="upResults"></table></div>
+        <p class="hint">Uses the token in <code>backend/.env</code> → <code>UPSTOX_ANALYTICS_TOKEN</code> (read-only, valid one year — no daily login).
+          History: 1-minute to hourly candles from <b>January 2022</b>, daily / weekly / monthly from <b>2000</b>; today's candles are included.
+          <b>Add</b> puts a security into your catalog so it appears in the symbol list and the bulk downloader.</p>
       </section>
     </div>
   </div>
