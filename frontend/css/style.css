@@ -452,3 +452,5 @@ table.bulk.tree tr.t-m td.t-nm { max-width: 340px; }
 .g-foot { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
 .btn.danger { color: var(--down); }
 .btn.danger.sure { background: var(--down); color: #fff; border-color: var(--down); }
+table.tree tr.t-g.auto b::before { content: "⬇ "; color: var(--up); font-weight: 400; }
+td.nowrap { white-space: nowrap; }

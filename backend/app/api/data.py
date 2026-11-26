@@ -114,6 +114,14 @@ def download_many(req: BulkReq):
         fail(e)
 
 
+@router.delete("/stored")
+def delete_stored(symbol: str, interval: str):
+    try:
+        return store.delete_stored(symbol, interval)
+    except Exception as e:  # noqa: BLE001
+        fail(e)
+
+
 @router.post("/update")
 def update(symbol: str, interval: str):
     try:

@@ -23,6 +23,7 @@ export const api = {
   inventory: () => call("GET", "/api/inventory"),
   download: (b) => call("POST", "/api/download", b),
   downloadMany: (items) => call("POST", "/api/download-many", { items }),
+  deleteStored: (symbol, interval) => call("DELETE", "/api/stored?" + q({ symbol, interval })),
   update: (symbol, interval) => call("POST", "/api/update?" + q({ symbol, interval })),
   job: (id) => call("GET", `/api/jobs/${id}`),
   importCsv: (b) => call("POST", "/api/import-csv", b),

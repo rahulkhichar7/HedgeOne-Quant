@@ -42,6 +42,10 @@ export function builtinGroups() {
     names: G.symbols.filter((s) => s.source === b.source).sort(byRank).map((s) => s.name) })).filter((g) => g.names.length);
   return _builtinCache;
 }
+/* automatic group: every security with data stored on this computer — grows when you download,
+   shrinks when you delete (it is worked out from the stored files, so it can never be out of date) */
+export const autoGroups = () => [{ id: "auto:data", label: "Downloaded", auto: true,
+  sub: "automatic — every security with data stored", names: G.symbols.filter((s) => s.stored.length).sort(byRank).map((s) => s.name) }];
 export const userGroups = () => G.list.map((g) => ({ id: g.id, label: g.name, names: g.members, user: true, raw: g }));
 
 /* ---------- search ---------- */
@@ -117,7 +121,7 @@ export class SecTree {
     (o.pinned ? o.pinned() : []).forEach((g) => { h += this._group(g, all); });
     if (q) {
       const ql = q.toLowerCase();
-      const ug = userGroups().filter((g) => g.label.toLowerCase().includes(ql));
+      const ug = [...autoGroups(), ...userGroups()].filter((g) => g.label.toLowerCase().includes(ql));
       if (ug.length) { h += sec("Your groups"); ug.forEach((g) => { h += this._group(g, all); }); }
       const hits = searchSymbols(q, (s) => this._ok(s.name)).map((s) => s.name);
       h += this._group({ id: "search", label: `Search results for “${esc(q)}”`, names: hits, open: true, search: true }, all, true);
@@ -125,8 +129,9 @@ export class SecTree {
       if (ck && sel.length) h += this._group({ id: "selected", label: "Selected", names: sel, sub: "everything ticked, from any group" }, all);
       const ug = userGroups();
       h += sec("Your groups", newBtns);
+      autoGroups().forEach((g) => { h += this._group({ ...g, open: !!o.openAuto }, all); });
       h += ug.length ? ug.map((g) => this._group(g, all)).join("")
-        : `<tr class="t-empty"><td colspan="${all}">No groups yet. A group is a list you make once — e.g. “Banks”, “My crypto” — and then select in one click everywhere. Use <b>＋ New group</b>, or the <b>＋</b> next to any security.</td></tr>`;
+        : `<tr class="t-empty"><td colspan="${all}">No groups of your own yet. A group is a list you make once — e.g. “Banks”, “My crypto” — and then select in one click everywhere. Use <b>＋ New group</b>, or the <b>＋</b> next to any security.</td></tr>`;
       h += sec("All securities");
       [...(o.extra ? o.extra() : []), ...builtinGroups()].forEach((g) => { h += this._group(g, all); });
     }
@@ -143,7 +148,7 @@ export class SecTree {
     const k = ck ? names.reduce((a, n) => a + (o.isOn(n) ? 1 : 0), 0) : 0;
     const dis = ck && o.disabled && o.disabled();
     const missing = g.user ? g.names.length - names.length : 0;
-    let h = `<tr class="t-g ${open ? "open" : ""} ${g.user ? "user" : ""} ${g.search ? "search" : ""}" data-g="${esc(g.id)}">` +
+    let h = `<tr class="t-g ${open ? "open" : ""} ${g.user ? "user" : ""} ${g.auto ? "auto" : ""} ${g.search ? "search" : ""}" data-g="${esc(g.id)}">` +
       (ck ? `<td class="t-ck"><input type="checkbox" data-gck title="Select / unselect all ${names.length}" ${names.length && k === names.length ? "checked" : ""}
               data-ind="${k && k < names.length ? 1 : 0}" ${dis || !names.length ? "disabled" : ""}></td>` : "") +
       `<td colspan="${all - (ck ? 1 : 0)}" class="t-gl"><div><span class="t-arr">${g.search ? "⌕" : "▸"}</span><b>${g.user ? esc(g.label) : g.label}</b>
@@ -340,7 +345,7 @@ function editorEl() {
   $("#geClear").onclick = () => { ED.members = []; res(); mem(); };
   $("#geFromGo").onclick = () => {
     const id = $("#geFrom").value;
-    const g = [...userGroups(), ...builtinGroups()].find((x) => x.id === id);
+    const g = [...autoGroups(), ...userGroups(), ...builtinGroups()].find((x) => x.id === id);
     if (!g) return;
     const add = g.names.filter((n) => G.byName.has(n));
     ED.members = [...new Set([...ED.members, ...add])];
@@ -383,7 +388,7 @@ export function openEditor(group, members = []) {
   $("#geSearch").value = ""; $("#geFilter").value = "";
   const del = $("#geDel");
   del.classList.toggle("hidden", !group); del.classList.remove("sure"); del.textContent = "Delete group";
-  $("#geFrom").innerHTML = [...userGroups().filter((g) => !group || g.id !== group.id), ...builtinGroups()]
+  $("#geFrom").innerHTML = [...autoGroups(), ...userGroups().filter((g) => !group || g.id !== group.id), ...builtinGroups()]
     .map((g) => `<option value="${esc(g.id)}">${esc(g.label)} (${g.names.length.toLocaleString()})</option>`).join("");
   ed.res(); ed.mem();
   ed.el.classList.remove("hidden");

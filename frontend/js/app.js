@@ -67,14 +67,12 @@ function renderIntervals() {
   $$("#intervals button").forEach((b) => b.onclick = () => { S.interval = b.dataset.iv; persist(); renderIntervals(); reload(); });
 }
 
-/* symbol picker: your groups, then "With data", then every security by source; search finds anything */
+/* symbol picker: Downloaded + your groups, then every security by source; search finds anything */
 const symTree = new SecTree({
-  key: "pick", el: $("#symTree"), checkable: false, page: 60,
+  key: "pick", el: $("#symTree"), checkable: false, page: 60, openAuto: true,
   query: () => $("#symSearch").value,
   active: () => S.symbol,
   onPick: (name) => { S.symbol = name; persist(); $("#symPop").classList.add("hidden"); updateSymLabel(); reload(); },
-  extra: () => [{ id: "withdata", label: "With data", sub: "stored on this computer", open: true,
-    names: S.symbols.filter((s) => s.stored.length).map((s) => s.name) }],
 });
 function renderSymbolList() { symTree.render(); }
 function updateSymLabel() { $("#symName").textContent = S.symbol || "—"; chart.symbolLabel = `${S.symbol || ""} · ${S.interval}`; }
@@ -688,12 +686,28 @@ async function loadStored() {
   const r = await api.inventory();
   $("#storedTable").innerHTML = `<thead><tr><th>Symbol</th><th>Source</th><th>Interval</th><th>Rows</th><th>First</th><th>Last</th><th></th></tr></thead><tbody>` +
     (r.files.map((f) => `<tr><td>${esc(f.symbol)}</td><td>${f.source}</td><td>${f.interval}</td><td class="num">${f.rows.toLocaleString()}</td>
-      <td>${esc(f.first)}</td><td>${esc(f.last)}</td><td><button class="btn ghost sm" data-up="${esc(f.symbol)}|${f.interval}">Update</button></td></tr>`).join("")
+      <td>${esc(f.first)}</td><td>${esc(f.last)}</td><td class="nowrap"><button class="btn ghost sm" data-up="${esc(f.symbol)}|${f.interval}">Update</button>
+      <button class="btn ghost sm danger" data-sdel="${esc(f.symbol)}|${f.interval}" title="Delete this stored data file">Delete</button></td></tr>`).join("")
       || `<tr><td colspan="7" class="muted">Nothing stored yet.</td></tr>`) + `</tbody>`;
   $$("[data-up]").forEach((b) => b.onclick = async () => {
     const [sym, iv] = b.dataset.up.split("|");
     try { const { job } = await api.update(sym, iv); showDataTab("download"); $("#dlStatus").textContent = `Updating ${sym}…`; pollJob(job); }
     catch (e) { toast(e.message, "error"); }
+  });
+  $$("[data-sdel]").forEach((b) => b.onclick = async () => {
+    const [sym, iv] = b.dataset.sdel.split("|");
+    if (!b.classList.contains("sure")) {             // two clicks, no pop-up
+      b.classList.add("sure"); b.textContent = "Sure? click again";
+      setTimeout(() => { if (b.isConnected) { b.classList.remove("sure"); b.textContent = "Delete"; } }, 4000);
+      return;
+    }
+    try {
+      const r = await api.deleteStored(sym, iv);
+      toast(`Deleted ${esc(sym)} ${iv}` + (r.left.length ? ` (still stored: ${r.left.join(", ")})` : " — it has left the Downloaded group"), "ok");
+      await refreshSymbols();
+      loadStored();
+      if (sym === S.symbol) reload();
+    } catch (e) { toast(e.message, "error"); }
   });
 }
 
@@ -1511,6 +1525,13 @@ async function watchCatalog() {
   else if (S.symbols.length !== before) toast(`Security list ready — ${S.symbols.length.toLocaleString()} securities to search, group and download.`, "ok", false, 7000);
   if (!$("#dataModal").classList.contains("hidden") && $("[data-dpanel=bulk]").classList.contains("active")) renderBulk();
 }
+
+let lastFocusRefresh = 0;
+window.addEventListener("focus", () => {
+  if (Date.now() - lastFocusRefresh < 5000 || BULK.job) return;
+  lastFocusRefresh = Date.now();
+  refreshSymbols().catch(() => {});
+});
 
 async function refreshSymbols() {
   const r = await api.symbols();
