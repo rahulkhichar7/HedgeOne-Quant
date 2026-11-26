@@ -29,6 +29,14 @@ export const api = {
   candles: (p) => call("GET", "/api/candles?" + q(p)),
   upstoxSearch: (text) => call("GET", "/api/upstox/search?" + q({ q: text })),
   upstoxCheck: (symbol) => call("GET", "/api/upstox/check?" + q({ symbol })),
+  catalogStatus: () => call("GET", "/api/catalog/status"),
+  catalogRefresh: () => call("POST", "/api/catalog/refresh"),
+
+  // your security groups ("playlists")
+  groups: () => call("GET", "/api/groups"),
+  createGroup: (b) => call("POST", "/api/groups", b),
+  patchGroup: (id, b) => call("PATCH", `/api/groups/${encodeURIComponent(id)}`, b),
+  deleteGroup: (id) => call("DELETE", `/api/groups/${encodeURIComponent(id)}`),
 
   strategies: () => call("GET", "/api/strategies"),
   reload: () => call("POST", "/api/strategies/reload"),

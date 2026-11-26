@@ -16,8 +16,8 @@
   <div class="sym-picker">
     <button id="symBtn" class="sym-btn" title="Change symbol"><span id="symName">—</span><span class="chev">▾</span></button>
     <div id="symPop" class="popover hidden">
-      <input id="symSearch" placeholder="Search symbol…" autocomplete="off">
-      <div id="symList" class="sym-list"></div>
+      <input id="symSearch" placeholder="Search any security — name, ticker, BTC, nifty…" autocomplete="off">
+      <div id="symList" class="sym-list"><table class="tree pick" id="symTree"></table></div>
     </div>
   </div>
 
@@ -156,7 +156,7 @@
     <div class="modal-body">
       <section data-dpanel="download" class="active">
         <div class="form-grid">
-          <label>Symbol<select id="dlSymbol"></select></label>
+          <label>Symbol<input id="dlSymbol" list="symDL" placeholder="Type to search…" autocomplete="off"></label>
           <label>Source<input id="dlSource" disabled></label>
           <label>Interval<select id="dlInterval"></select></label>
           <label>From<input type="date" id="dlStart"></label>
@@ -176,10 +176,11 @@
           <button class="btn ghost" id="bkFill" title="Set each ticked security's From to its last stored candle, so only the missing data is fetched">From last stored</button>
         </div>
         <div class="row" style="margin-top:10px">
-          <input id="bkSearch" class="grow" placeholder="Search securities…">
-          <div class="seg mini" id="bkQuick"><button data-q="all">All</button><button data-q="data">Stored only</button><button data-q="failed" title="Tick only the rows that failed in the last run, to resume them">Failed</button><button data-q="none">None</button></div>
+          <input id="bkSearch" class="grow" placeholder="Search any security — name, ticker, BTC, nifty…" autocomplete="off">
+          <div class="seg mini" id="bkQuick"><button data-q="data" title="Tick every security that already has data stored (to update it)">Stored only</button><button data-q="failed" title="Tick only the rows that failed in the last run, to resume them">Failed</button><button data-q="none">None</button></div>
         </div>
-        <div class="table-wrap bulk-wrap"><table class="grid bulk" id="bkTable"></table></div>
+        <div id="bkCat" class="catline"></div>
+        <div class="table-wrap bulk-wrap"><table class="grid bulk tree" id="bkTable"></table></div>
         <div class="row">
           <span id="bkCount" class="grow muted"></span>
           <button class="btn primary" id="bkGo">Start downloading</button>
@@ -193,7 +194,7 @@
       </section>
       <section data-dpanel="import">
         <div class="form-grid">
-          <label>Symbol<select id="imSymbol"></select></label>
+          <label>Symbol<input id="imSymbol" list="symDL" placeholder="Type to search…" autocomplete="off"></label>
           <label>Interval of the file<input id="imInterval" value="1m"></label>
           <label class="wide">CSV path on this computer<input id="imPath" placeholder="C:\Users\you\data\TCS.csv"></label>
           <label><span>Day-first dates (DD/MM/YYYY)</span><input type="checkbox" id="imDayfirst" checked></label>
@@ -260,12 +261,12 @@
     <div class="modal-body">
       <div id="uniWhere" class="hint" style="margin-top:0"></div>
       <div class="row" style="margin-top:8px">
-        <input id="uniSearch" class="grow" placeholder="Search securities…">
+        <input id="uniSearch" class="grow" placeholder="Search any security — name, ticker, BTC, nifty…" autocomplete="off">
         <div class="seg mini" id="uniQuick">
-          <button data-q="all">All</button><button data-q="data">With data</button><button data-q="none">None</button>
+          <button data-q="data" title="Tick every security that has data stored">With data</button><button data-q="none">None</button>
         </div>
       </div>
-      <div id="uniList" class="uni-list"></div>
+            <div id="uniList" class="uni-list"><table class="tree" id="uniTree"></table></div>
       <div class="row">
         <span id="uniCount" class="grow muted"></span>
         <button class="btn primary" id="uniGo">Run universe test ↗</button>
@@ -274,6 +275,7 @@
   </div>
 </div>
 
+<datalist id="symDL"></datalist>
 <div id="toasts" class="toasts"></div>
 <footer class="attribution">Charts by <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView</a> Lightweight Charts™</footer>
 

@@ -290,6 +290,28 @@ an optimizer table matches what you get when you backtest those parameters on th
 - Downloading again **merges** into the stored file. **Data → Stored → Update** fetches only what's new.
 - Downloads run in the background, and the dialog shows live progress.
 
+### Every security, and your groups ("playlists")
+
+- **The full security list.** Besides your own `symbols.json`, the app lists every security the three sources offer:
+  - Upstox: about 3,500 NSE stocks/ETFs (EQ, BE and SME series) plus all NSE and BSE indices.
+  - CoinDCX: every active spot pair.
+  - Delta: every live perpetual.
+  
+  It's stored in `data/catalog/all_securities.json`, rebuilt by itself once a week. **Bulk download → ↻ Refresh list** rebuilds it now.
+  Your own `symbols.json` entries always win, and duplicates of them are skipped.
+- **Search** in the symbol picker, Bulk download, Universe test, Download and Import finds any of them by name or ticker.
+- **Groups** are named lists you make once and reuse everywhere. They're saved in `data/groups.json`.
+  - A security can be in many groups. Ticking two groups selects their **union**, so a security in both is counted once.
+  - Pickers show **your groups first**, then *Stocks & indices / CoinDCX / Delta Exchange India*.
+  - Click a group to expand or collapse it. Its checkbox selects or unselects all of it.
+  - **＋ New group**, **Save selection as group**, **✎ Edit** (rename, add by search or from another group, remove, delete), or the **＋** that appears next to any security to tick the groups it belongs to.
+- API:
+  - `GET/POST /api/groups`
+  - `PATCH /api/groups/{id}` (`name`, `members`, `add`, `remove`)
+  - `DELETE /api/groups/{id}`
+  - `GET /api/catalog/status`
+  - `POST /api/catalog/refresh`
+
 ---
 
 ## 7. Built-in library

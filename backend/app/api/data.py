@@ -52,9 +52,18 @@ class SymbolReq(BaseModel):
 def symbols():
     """Catalog + which intervals are stored locally for each symbol."""
     out = []
+    own = store.own_names()
     for name, info in store.catalog().items():
-        out.append({"name": name, **info, "stored": store.stored_intervals(name)})
-    return {"symbols": out, "markets": list(config.MARKETS),
+        kind = info.get("kind") or ("crypto" if info.get("market") == "CRYPTO" else
+                                    "index" if "INDEX" in str(info.get("symbol", "")).upper() else "stock")
+        row = {"name": name, "source": info["source"], "symbol": info["symbol"], "market": info["market"],
+               "kind": kind, "stored": store.stored_intervals(name)}
+        if name in own:
+            row["own"] = True
+        if info.get("series"):
+            row["series"] = info["series"]
+        out.append(row)
+    return {"symbols": out, "catalog": {k: v for k, v in store.catalog_status().items() if k != "log"}, "markets": list(config.MARKETS),
             "costs": {k: v.__dict__ for k, v in config.COST_PRESETS.items()}}
 
 

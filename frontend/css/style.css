@@ -378,3 +378,77 @@ table.bulk .st { font-size: 11.5px; white-space: nowrap; }
 table.opt-grid tr.tfrow td { background: rgba(41,98,255,.06); }
 table.opt-grid .tfvals { margin-bottom: 3px; }
 table.opt-grid .tfvals label { color: var(--text); font-size: 12px; }
+
+/* ---------- security tree (picker / bulk download / universe test) + groups ---------- */
+.popover.sym-pop-wide, #symPop { width: 470px; }
+.sym-list .tree { width: 100%; }
+table.tree { width: 100%; border-collapse: collapse; }
+table.tree td { padding: 3px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+table.tree td.t-ck { width: 26px; padding-right: 0; text-align: center; }
+table.tree th.t-ck { width: 26px; }
+table.tree tr.t-sec td { background: var(--bg); padding: 9px 8px 5px; border-top: 1px solid var(--line2); border-bottom: 1px solid var(--line); }
+table.tree tr.t-sec td > div { display: flex; align-items: center; gap: 6px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); font-weight: 600; }
+table.tree tr.t-sec .btn { text-transform: none; letter-spacing: 0; font-weight: 500; }
+table.tree tr.t-g { cursor: pointer; background: var(--bg2); }
+table.tree tr.t-g:hover { background: var(--bg3); }
+table.tree tr.t-g td { padding-top: 6px; padding-bottom: 6px; }
+table.tree tr.t-g td.t-gl > div { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+table.tree tr.t-g b { color: var(--strong); font-weight: 600; }
+table.tree tr.t-g.user b::before { content: "★ "; color: var(--warn); font-weight: 400; }
+.t-arr { display: inline-block; width: 12px; color: var(--muted); transition: transform .12s; font-size: 11px; }
+tr.t-g.open .t-arr { transform: rotate(90deg); }
+tr.t-g.search .t-arr { transform: none; }
+.t-n { background: var(--bg3); border-radius: 8px; padding: 0 7px; font-size: 11px; color: var(--muted); }
+.t-k { color: var(--accent); font-size: 11.5px; font-weight: 600; }
+.t-sub { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
+.t-sub.warn { color: var(--warn); }
+table.tree tr.t-m td.t-nm { padding-left: 26px; max-width: 420px; }
+table.tree.pick tr.t-m td.t-nm { padding-left: 24px; }
+table.tree tr.t-m td.t-nm > div { display: flex; align-items: center; gap: 6px; }
+.t-name { min-width: 0; flex: 1; overflow: hidden; }
+.t-name b { font-weight: 500; color: var(--text); display: block; overflow: hidden; text-overflow: ellipsis; }
+.t-name small { display: block; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+table.tree tr.t-m.off .t-name b { color: var(--muted); }
+table.tree tr.t-m:hover { background: var(--bg2); }
+table.tree.pick tr.t-m { cursor: pointer; }
+table.tree.pick tr.t-m.active { background: var(--bg3); box-shadow: inset 2px 0 var(--accent); }
+.t-plus { opacity: 0; background: none; border: 1px solid var(--line2); color: var(--muted); border-radius: 4px; cursor: pointer; padding: 0 5px; line-height: 17px; font-size: 12px; flex: none; }
+tr.t-m:hover .t-plus { opacity: 1; }
+.t-plus:hover { color: var(--strong); border-color: var(--accent); }
+table.tree tr.t-more td, table.tree tr.t-empty td { padding: 6px 8px 6px 34px; color: var(--muted); font-size: 12px; white-space: normal; }
+table.tree tr.t-more .btn { margin-right: 8px; }
+.uni-list { padding: 0; }
+.uni-list table.tree tr.t-sec td { position: static; }
+table.bulk.tree tr.t-m td.t-nm { max-width: 340px; }
+.catline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+.catline .spin { width: 11px; height: 11px; }
+.catline .srcwarn { margin-left: 0; }
+
+.g-menu { position: fixed; z-index: 200; min-width: 230px; max-width: 320px; max-height: 60vh; overflow: auto; background: var(--bg2); border: 1px solid var(--line2); border-radius: 8px; box-shadow: 0 14px 40px rgba(0,0,0,.55); padding: 6px; }
+.g-menu .g-mt { font-size: 11px; color: var(--muted); padding: 4px 6px 6px; border-bottom: 1px solid var(--line); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-menu label { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 4px; cursor: pointer; }
+.g-menu label:hover { background: var(--bg3); }
+.g-menu label span { flex: 1; }
+.g-menu label small { color: var(--muted); }
+.g-menu .btn { width: 100%; margin-top: 4px; text-align: left; }
+.g-none { color: var(--muted); font-size: 12px; padding: 8px 6px; }
+.g-modal { z-index: 150; }
+.modal-box.g-ed { width: min(900px, 95vw); }
+.g-name { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--muted); max-width: 380px; }
+.g-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+.g-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.g-h { display: flex; align-items: center; gap: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 600; }
+.g-h .btn { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.g-from { display: flex; align-items: center; gap: 6px; }
+.g-from select { flex: 1; min-width: 0; padding: 3px 5px; font-size: 12px; }
+.g-list { height: 46vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); }
+.g-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.g-item:hover { background: var(--bg2); }
+.g-item.in .g-txt b { color: var(--up); }
+.g-txt { flex: 1; min-width: 0; }
+.g-txt b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-txt small { display: block; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-all { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.g-foot { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.btn.danger { color: var(--down); }
+.btn.danger.sure { background: var(--down); color: #fff; border-color: var(--down); }

@@ -5,6 +5,7 @@ import { api } from "./api.js";
 import { ChartStack, PALETTE, fmtNum, fmtTime } from "./chart.js";
 import { Replay } from "./replay.js";
 import { $, $$, esc, highlightPy, insightCards, kpiCards, metricMap, metricTables, toast, tradeRows, TRADE_HEAD, fmtMetric } from "./ui.js";
+import { G, SecTree, loadGroups, searchSymbols, setSymbols, SRC_LABEL } from "./groups.js";
 
 const INTERVALS = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "1d", "1w"];
 
@@ -66,21 +67,16 @@ function renderIntervals() {
   $$("#intervals button").forEach((b) => b.onclick = () => { S.interval = b.dataset.iv; persist(); renderIntervals(); reload(); });
 }
 
-function renderSymbolList(filter = "") {
-  const f = filter.toLowerCase();
-  const groups = {};
-  S.symbols.filter((s) => !f || s.name.toLowerCase().includes(f) || s.symbol.toLowerCase().includes(f))
-    .forEach((s) => (groups[s.market] = groups[s.market] || []).push(s));
-  $("#symList").innerHTML = Object.entries(groups).map(([mk, list]) =>
-    `<div class="sym-group">${mk}</div>` + list.map((s) => `
-      <div class="sym-row ${s.name === S.symbol ? "active" : ""}" data-sym="${esc(s.name)}">
-        <span class="sym-n">${esc(s.name)}</span>
-        <span class="sym-meta">${s.stored.length ? `<span class="dot ok"></span>${s.stored.join(" ")}` : `<span class="dot"></span>no data`}
-        · ${s.source}</span></div>`).join("")).join("") || `<div class="placeholder">No match</div>`;
-  $$("#symList .sym-row").forEach((r) => r.onclick = () => {
-    S.symbol = r.dataset.sym; persist(); $("#symPop").classList.add("hidden"); updateSymLabel(); reload();
-  });
-}
+/* symbol picker: your groups, then "With data", then every security by source; search finds anything */
+const symTree = new SecTree({
+  key: "pick", el: $("#symTree"), checkable: false, page: 60,
+  query: () => $("#symSearch").value,
+  active: () => S.symbol,
+  onPick: (name) => { S.symbol = name; persist(); $("#symPop").classList.add("hidden"); updateSymLabel(); reload(); },
+  extra: () => [{ id: "withdata", label: "With data", sub: "stored on this computer", open: true,
+    names: S.symbols.filter((s) => s.stored.length).map((s) => s.name) }],
+});
+function renderSymbolList() { symTree.render(); }
 function updateSymLabel() { $("#symName").textContent = S.symbol || "—"; chart.symbolLabel = `${S.symbol || ""} · ${S.interval}`; }
 
 $("#symBtn").onclick = (e) => {
@@ -89,8 +85,16 @@ $("#symBtn").onclick = (e) => {
   pop.classList.toggle("hidden");
   if (!pop.classList.contains("hidden")) { $("#symSearch").value = ""; renderSymbolList(); $("#symSearch").focus(); }
 };
-$("#symSearch").oninput = (e) => renderSymbolList(e.target.value);
-document.addEventListener("click", (e) => { if (!e.target.closest(".sym-picker")) $("#symPop").classList.add("hidden"); });
+$("#symSearch").oninput = () => renderSymbolList();
+$("#symSearch").onkeydown = (e) => {             // Enter picks the first search result
+  if (e.key !== "Enter") return;
+  const first = $("#symTree tr.t-m");
+  if (first) symTree.o.onPick(first.dataset.n);
+};
+document.addEventListener("click", (e) => {
+  if (!e.target.isConnected) return;               // the clicked row was just re-rendered (expand / collapse)
+  if (!e.target.closest(".sym-picker") && !e.target.closest(".g-menu, .g-modal")) $("#symPop").classList.add("hidden");
+});
 
 $("#start").onchange = (e) => { S.start = e.target.value; persist(); reload(); };
 $("#end").onchange = (e) => { S.end = e.target.value; persist(); reload(); };
@@ -644,20 +648,24 @@ $$("#dataTabs button").forEach((b) => b.onclick = () => showDataTab(b.dataset.dt
 let SOURCES = {};
 async function fillDataForms() {
   SOURCES = await api.sources().catch(() => ({}));
-  const opts = S.symbols.map((s) => `<option ${s.name === S.symbol ? "selected" : ""}>${esc(s.name)}</option>`).join("");
-  $("#dlSymbol").innerHTML = opts; $("#imSymbol").innerHTML = opts;
+  $("#symDL").innerHTML = S.symbols.map((s) => `<option value="${esc(s.name)}">${esc(s.symbol)} · ${SRC_LABEL[s.source] || esc(s.source)}</option>`).join("");
+  if (!G.byName.has($("#dlSymbol").value)) $("#dlSymbol").value = S.symbol || "";
+  if (!G.byName.has($("#imSymbol").value)) $("#imSymbol").value = S.symbol || "";
   const syncSrc = () => {
-    const s = S.symbols.find((x) => x.name === $("#dlSymbol").value);
-    const src = SOURCES[s?.source];
-    $("#dlSource").value = src ? `${src.label} (${s.symbol})${src.ready ? "" : " — " + src.message}` : `${s?.source} (no downloader)`;
-    $("#dlInterval").innerHTML = (src ? src.intervals : []).map((i) => `<option ${i === "5m" ? "selected" : ""}>${i}</option>`).join("");
+    const s = G.byName.get($("#dlSymbol").value);
+    if (!s) { $("#dlSource").value = "— pick a security from the list —"; return; }
+    const src = SOURCES[s.source];
+    $("#dlSource").value = src ? `${src.label} (${s.symbol})${src.ready ? "" : " — " + src.message}` : `${s.source} (no downloader)`;
+    const keep = $("#dlInterval").value;
+    $("#dlInterval").innerHTML = (src ? src.intervals : []).map((i) => `<option ${i === (keep || "5m") ? "selected" : ""}>${i}</option>`).join("");
   };
-  $("#dlSymbol").onchange = syncSrc; syncSrc();
+  $("#dlSymbol").oninput = syncSrc; $("#dlSymbol").onchange = syncSrc; syncSrc();
   if (!$("#dlStart").value) $("#dlStart").value = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
   if (!$("#dlEnd").value) $("#dlEnd").value = new Date().toISOString().slice(0, 10);
 }
 
 $("#dlGo").onclick = async () => {
+  if (!G.byName.has($("#dlSymbol").value)) { $("#dlStatus").textContent = "Pick a security from the list first."; return; }
   try {
     const { job } = await api.download({ symbol: $("#dlSymbol").value, interval: $("#dlInterval").value,
       start: $("#dlStart").value + "T00:00:00", end: $("#dlEnd").value + "T23:59:59" });
@@ -725,53 +733,70 @@ async function loadBulk() {
   renderBulk();
 }
 
-function bulkSymbols() {
-  const f = $("#bkSearch").value.toLowerCase();
-  return S.symbols.filter((s) => SOURCES[s.source] && (!f || s.name.toLowerCase().includes(f) || s.symbol.toLowerCase().includes(f)));
+function bulkSymbols() {        // what the quick buttons act on: the search results, or everything downloadable
+  const q = $("#bkSearch").value.trim();
+  return q ? searchSymbols(q, (s) => !!SOURCES[s.source]) : S.symbols.filter((s) => SOURCES[s.source]);
 }
-
-function renderBulk() {
-  const running = !!BULK.job;
-  const groups = {};
-  bulkSymbols().forEach((s) => (groups[s.source] = groups[s.source] || []).push(s));
-  const stTxt = (name) => {
-    const x = BULK.state[name];
-    if (!x) return "";
-    return `<span class="st ${x.cls}">${esc(x.text)}</span>`;
-  };
-  $("#bkTable").innerHTML = `<thead><tr><th></th><th>Security</th><th>Interval</th><th>From</th><th>To</th><th>Stored (this interval)</th><th>Status</th></tr></thead><tbody>` +
-    Object.entries(groups).map(([src, list]) => {
-      const info = SOURCES[src];
-      return `<tr class="grp"><td colspan="7">${esc(info.label)} · ${list.length}
-          ${src === "upstox" ? `<span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400;margin-left:6px" title="Earlier start dates are moved to the earliest available day automatically">history: minutes / hours from Jan 2022 · daily from 2000</span>` : ""}
-          ${info.ready ? "" : `<span class="srcwarn">⚠ ${esc(info.message || "not ready")}${src === "upstox" ? ` — <a href="#" data-uplink>Upstox tab</a>` : ""}</span>`}
-          <button class="btn ghost sm" data-ga="${src}">select all</button><button class="btn ghost sm" data-gn="${src}">none</button></td></tr>` +
-        list.map((s) => {
-          const r = bulkRow(s), st = storedFor(s.name, r.interval);
-          return `<tr class="${r.on ? "" : "off"}" data-b="${esc(s.name)}">
-            <td><input type="checkbox" data-k="on" ${r.on ? "checked" : ""} ${running ? "disabled" : ""}></td>
-            <td class="nm"><b>${esc(s.name)}</b><small>${esc(s.symbol)}</small></td>
-            <td><select data-k="interval" ${running ? "disabled" : ""}>${info.intervals.map((i) => `<option ${i === r.interval ? "selected" : ""}>${i}</option>`).join("")}</select></td>
-            <td><input type="date" data-k="start" value="${esc(r.start)}" ${running ? "disabled" : ""}></td>
-            <td><input type="date" data-k="end" value="${esc(r.end)}" ${running ? "disabled" : ""}></td>
-            <td class="stored">${st ? `${esc(st.first.slice(0, 10))} → ${esc(st.last.slice(0, 10))} · ${st.rows.toLocaleString()}` : "—"}</td>
-            <td class="stc">${stTxt(s.name)}</td></tr>`;
-        }).join("");
-    }).join("") + `</tbody>`;
-  $$("#bkTable tr[data-b]").forEach((tr) => {
-    const r = BULK.rows[tr.dataset.b];
-    $$("[data-k]", tr).forEach((el) => el.onchange = () => {
-      r[el.dataset.k] = el.type === "checkbox" ? el.checked : el.value;
-      saveBulk();
-      if (el.dataset.k === "on") { tr.classList.toggle("off", !el.checked); bulkCount(); }
-      if (el.dataset.k === "interval") renderBulk();       // refresh the "stored" column
+const bkOn = (n) => !!(BULK.rows[n] && BULK.rows[n].on);
+const bkStTxt = (name) => { const x = BULK.state[name]; return x ? `<span class="st ${x.cls}">${esc(x.text)}</span>` : ""; };
+const bkTree = new SecTree({
+  key: "bulk", el: $("#bkTable"), cols: 5, page: 100,
+  head: `<tr><th class="t-ck"></th><th>Security</th><th>Interval</th><th>From</th><th>To</th><th>Stored (this interval)</th><th>Status</th></tr>`,
+  filter: (s) => !!SOURCES[s.source],
+  query: () => $("#bkSearch").value,
+  isOn: bkOn,
+  setOn: (names, on) => {
+    names.forEach((n) => {
+      const s = G.byName.get(n);
+      if (s && SOURCES[s.source] && (on || BULK.rows[n])) bulkRow(s).on = on;
     });
+    saveBulk();
+  },
+  disabled: () => !!BULK.job,
+  pinned: () => {
+    if (!BULK.items.length) return [];
+    const st = BULK.items.map((it) => (BULK.state[it.symbol] || {}).cls);
+    const ok = st.filter((x) => x === "ok").length, bad = st.filter((x) => x === "err").length;
+    return [{ id: "run", open: true, label: BULK.job ? "This download — running" : "Last download",
+      sub: `${ok} done${bad ? ` · <span class="neg">${bad} failed</span>` : ""} of ${BULK.items.length}`,
+      names: BULK.items.map((it) => it.symbol) }];
+  },
+  cells: (s) => {
+    const info = SOURCES[s.source], r = bulkRow(s), st = storedFor(s.name, r.interval), dis = BULK.job ? "disabled" : "";
+    return `<td><select data-k="interval" ${dis}>${info.intervals.map((i) => `<option ${i === r.interval ? "selected" : ""}>${i}</option>`).join("")}</select></td>
+      <td><input type="date" data-k="start" value="${esc(r.start)}" ${dis}></td>
+      <td><input type="date" data-k="end" value="${esc(r.end)}" ${dis}></td>
+      <td class="stored">${st ? `${esc(st.first.slice(0, 10))} → ${esc(st.last.slice(0, 10))} · ${st.rows.toLocaleString()}` : "—"}</td>
+      <td class="stc">${bkStTxt(s.name)}</td>`;
+  },
+  after: () => { bulkCount(); renderCatLine("#bkCat", true); },
+});
+function renderBulk() { bkTree.render(); }
+
+$("#bkTable").addEventListener("change", (e) => {          // per-row interval / from / to
+  const el = e.target.closest("[data-k]");
+  if (!el) return;
+  const tr = el.closest("tr"), n = tr.dataset.n, r = BULK.rows[n];
+  if (!r) return;
+  r[el.dataset.k] = el.value;
+  saveBulk();
+  if (el.dataset.k === "interval") { renderBulk(); return; }        // refresh the "stored" column
+  $$("#bkTable tr.t-m").forEach((x) => {                               // the same security shown in another group
+    if (x !== tr && x.dataset.n === n) { const f = x.querySelector(`[data-k="${el.dataset.k}"]`); if (f) f.value = el.value; }
   });
-  const inGroup = (src) => bulkSymbols().filter((s) => s.source === src);
-  $$("#bkTable [data-ga]").forEach((b) => b.onclick = () => { if (!running) { inGroup(b.dataset.ga).forEach((s) => { BULK.rows[s.name].on = true; }); saveBulk(); renderBulk(); } });
-  $$("#bkTable [data-gn]").forEach((b) => b.onclick = () => { if (!running) { inGroup(b.dataset.gn).forEach((s) => { BULK.rows[s.name].on = false; }); saveBulk(); renderBulk(); } });
-  $$("#bkTable [data-uplink]").forEach((a) => a.onclick = (e) => { e.preventDefault(); showDataTab("upstox"); });
-  bulkCount();
+});
+
+/* Upstox requests a row needs (1–15 min: one per month, 30 min–4 h: per quarter, daily: per decade) */
+const MINUTE_IV = ["1m", "2m", "3m", "5m", "10m", "15m"], HOUR_IV = ["30m", "1h", "2h", "4h"];
+function upstoxCalls(r) {
+  const intra = MINUTE_IV.includes(r.interval) || HOUR_IV.includes(r.interval);
+  const a = new Date(Math.max(new Date(r.start || today()), new Date(intra ? "2022-01-01" : "2000-01-01")));
+  const b = new Date(r.end || today());
+  if (b < a) return 0;
+  const months = (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth() + 1;
+  const n = MINUTE_IV.includes(r.interval) ? months : HOUR_IV.includes(r.interval) ? Math.ceil(months / 3) + 1
+    : r.interval === "1d" ? Math.ceil(months / 120) + 1 : 1;
+  return n + (intra && (r.end || today()) >= today() ? 1 : 0);
 }
 
 function bulkSelected() { return S.symbols.filter((s) => SOURCES[s.source] && BULK.rows[s.name] && BULK.rows[s.name].on); }
@@ -782,7 +807,7 @@ function bulkCount() {
   const perSource = () => {
     const g = {};
     BULK.items.forEach((it) => {
-      const src = (S.symbols.find((x) => x.name === it.symbol) || {}).source || "?";
+      const src = (G.byName.get(it.symbol) || {}).source || "?";
       const st = (BULK.state[it.symbol] || {}).cls;
       const x = (g[src] = g[src] || { run: 0, done: 0, n: 0 });
       x.n++; if (st === "run") x.run++; if (st === "ok" || st === "err") x.done++;
@@ -790,20 +815,26 @@ function bulkCount() {
     return Object.entries(g).map(([src, x]) => `<span title="each source has its own queue; they run in parallel">${esc((SOURCES[src] || {}).label || src)}: ` +
       `${x.run ? `<b>${x.run}</b> running · ` : ""}${x.done}/${x.n} done</span>`).join(" &nbsp;|&nbsp; ");
   };
+  const calls = running ? 0 : sel.filter((s) => s.source === "upstox").reduce((a, s) => a + upstoxCalls(BULK.rows[s.name]), 0);
+  const hours = calls / 1600 * 0.5;
   $("#bkCount").innerHTML = running ? `Downloading… <b>${BULK.done || 0}</b> of ${BULK.items.length} finished &nbsp;—&nbsp; ${perSource()}` :
-    `<b>${sel.length}</b> selected` + (notReady ? ` · <span class="neg">${notReady} from a source that isn't ready</span> (they'll fail — log in first)` : "");
+    `<b>${sel.length.toLocaleString()}</b> selected` + (notReady ? ` · <span class="neg">${notReady} from a source that isn't ready</span> (they'll fail — fix the source first)` : "") +
+    (calls > 400 ? ` · <span title="Upstox allows 2,000 requests per 30 minutes; HedgeOne uses 1,600 and pauses / resumes by itself">≈ ${calls.toLocaleString()} Upstox requests` +
+      (calls > 1600 ? ` → roughly <b>${hours < 1.5 ? Math.round(hours * 60) + " min" : hours.toFixed(1) + " h"}</b> at Upstox's limit` : "") + `</span>` : "");
   $("#bkGo").disabled = running || !sel.length;
   ["#bkApply", "#bkFill"].forEach((id) => { $(id).disabled = running; });
 }
 
-$("#bkSearch").oninput = () => renderBulk();
+let bkTimer = null;
+$("#bkSearch").oninput = () => { clearTimeout(bkTimer); bkTimer = setTimeout(renderBulk, 150); };
 $$("#bkQuick button").forEach((b) => b.onclick = () => {
   if (BULK.job) return;
   const q = b.dataset.q;
   if (q === "failed" && !Object.values(BULK.state).some((x) => x.cls === "err")) { toast("Nothing failed in the last run.", "info"); return; }
-  bulkSymbols().forEach((s) => {
-    bulkRow(s).on = q === "all" ? true : q === "data" ? s.stored.length > 0
-      : q === "failed" ? (BULK.state[s.name] || {}).cls === "err" : false;
+  if (q === "none") Object.values(BULK.rows).forEach((r) => { r.on = false; });
+  else bulkSymbols().forEach((s) => {
+    const on = q === "data" ? s.stored.length > 0 : (BULK.state[s.name] || {}).cls === "err";
+    if (on || BULK.rows[s.name]) bulkRow(s).on = on;
   });
   saveBulk(); renderBulk();
 });
@@ -1349,8 +1380,6 @@ async function runOptimizer(def) {
    ===================================================================== */
 const uniModal = $("#uniModal");
 uniModal.addEventListener("click", (e) => { if (e.target === uniModal || e.target.closest("[data-close]")) uniModal.classList.add("hidden"); });
-const secType = (s) => (s.market === "CRYPTO" ? "Crypto" : /INDEX/i.test(s.symbol) ? "Index" : "Stock");
-const TYPE_LABEL = { Stock: "Stocks", Index: "Indices", Crypto: "Crypto" };
 let uniSel = new Set();
 
 function openUniverse() {
@@ -1369,38 +1398,31 @@ function openUniverse() {
   uniModal.classList.remove("hidden");
 }
 
-function renderUniList() {
-  const f = $("#uniSearch").value.toLowerCase();
-  const groups = {};
-  S.symbols.filter((s) => !f || s.name.toLowerCase().includes(f) || s.symbol.toLowerCase().includes(f))
-    .forEach((s) => (groups[secType(s)] = groups[secType(s)] || []).push(s));
-  $("#uniList").innerHTML = ["Stock", "Index", "Crypto"].filter((t) => groups[t]).map((t) => `
-    <div class="uni-group">${TYPE_LABEL[t]} <span>${groups[t].length}</span><span class="spacer"></span>
-      <button class="btn ghost sm" data-ga="${t}">select all</button><button class="btn ghost sm" data-gn="${t}">none</button></div>
-    <div class="uni-rows">${groups[t].map((s) => `<label class="uni-row ${s.stored.length ? "" : "nodata"}" title="${esc(s.symbol)} · ${esc(s.source)}">
-      <input type="checkbox" data-u="${esc(s.name)}" ${uniSel.has(s.name) ? "checked" : ""}>
-      <span class="dot ${s.stored.length ? "ok" : ""}"></span><span class="nm">${esc(s.name)}</span>
-      <span class="iv">${s.stored.length ? esc(s.stored.join(" ")) : "no data"}</span></label>`).join("")}</div>`).join("") || `<div class="placeholder">No match</div>`;
-  $$("#uniList [data-u]").forEach((c) => c.onchange = () => { c.checked ? uniSel.add(c.dataset.u) : uniSel.delete(c.dataset.u); uniCount(); });
-  const inGroup = (t) => S.symbols.filter((s) => secType(s) === t && (!f || s.name.toLowerCase().includes(f) || s.symbol.toLowerCase().includes(f)));
-  $$("#uniList [data-ga]").forEach((b) => b.onclick = () => { inGroup(b.dataset.ga).forEach((s) => uniSel.add(s.name)); renderUniList(); });
-  $$("#uniList [data-gn]").forEach((b) => b.onclick = () => { inGroup(b.dataset.gn).forEach((s) => uniSel.delete(s.name)); renderUniList(); });
-  uniCount();
-}
+const uniTree = new SecTree({
+  key: "uni", el: $("#uniTree"), page: 100,
+  query: () => $("#uniSearch").value,
+  isOn: (n) => uniSel.has(n),
+  setOn: (names, on) => names.forEach((n) => (on ? uniSel.add(n) : uniSel.delete(n))),
+  after: () => uniCount(),
+});
+function renderUniList() { uniTree.render(); }
 function uniCount() {
-  const noData = [...uniSel].filter((n) => !(S.symbols.find((s) => s.name === n) || { stored: [] }).stored.length).length;
-  $("#uniCount").innerHTML = `<b>${uniSel.size}</b> selected` + (noData ? ` · <span class="neg">${noData} without data</span> (they'll be listed as not tested)` : "");
+  const noData = [...uniSel].filter((n) => !(G.byName.get(n) || { stored: [] }).stored.length).length;
+  $("#uniCount").innerHTML = `<b>${uniSel.size.toLocaleString()}</b> selected` + (noData ? ` · <span class="neg">${noData.toLocaleString()} without data</span> (they'll be listed as not tested — download them first)` : "");
   $("#uniGo").disabled = uniSel.size < 1;
 }
-$("#uniSearch").oninput = renderUniList;
+let uniTimer = null;
+$("#uniSearch").oninput = () => { clearTimeout(uniTimer); uniTimer = setTimeout(renderUniList, 150); };
 $$("#uniQuick button").forEach((b) => b.onclick = () => {
   const q = b.dataset.q;
-  uniSel = new Set(q === "all" ? S.symbols.map((s) => s.name) : q === "data" ? S.symbols.filter((s) => s.stored.length).map((s) => s.name) : []);
+  if (q === "none") uniSel = new Set();
+  else S.symbols.filter((s) => s.stored.length).forEach((s) => uniSel.add(s.name));
   renderUniList();
 });
 $("#uniGo").onclick = async () => {
   const def = S.strategies.find((x) => x.name === S.strategy);
   const symbols = S.symbols.map((s) => s.name).filter((n) => uniSel.has(n));
+  if (!symbols.length) { toast("Select at least one security.", "error"); return; }
   const rp = normalRange();
   const w = window.open("", "_blank");
   if (w) w.document.write(`<p style="font:14px sans-serif;padding:40px">Starting the universe test…</p>`);
@@ -1454,9 +1476,48 @@ window.addEventListener("storage", (e) => { if (e.key === "h1-use-params" && e.n
 /* =====================================================================
    Boot
    ===================================================================== */
+/* the full security list is built on the server in the background (weekly) — show its state */
+let CAT = {};
+function renderCatLine(sel, withSources = false) {
+  const el = $(sel);
+  if (!el) return;
+  const c = CAT.counts || {};
+  const total = Object.values(c).reduce((a, b) => a + b, 0);
+  const warn = withSources ? Object.entries(SOURCES).filter(([, v]) => !v.ready)
+    .map(([k, v]) => `<span class="srcwarn">⚠ ${esc(v.label)}: ${esc(v.message || "not ready")}${k === "upstox" ? ` — <a href="#" data-uplink>Upstox tab</a>` : ""}</span>`).join("") : "";
+  const errs = Object.entries(CAT.errors || {}).map(([k, v]) => `<span class="srcwarn" title="${esc(v)}">⚠ ${esc(SRC_LABEL[k] || k)} list couldn't be refreshed (kept the last one)</span>`).join("");
+  el.innerHTML = (CAT.running ? `<span class="spin"></span> Building the full security list… ${esc((CAT.log || []).slice(-1)[0] || "")}`
+    : total ? `<span>${S.symbols.length.toLocaleString()} securities — ${Object.entries(c).map(([k, v]) => `${v.toLocaleString()} ${SRC_LABEL[k] || k}`).join(" · ")} listed`
+      + ` + your own · updated ${esc((CAT.built || "").slice(0, 10))}</span>` : `<span>Only your own symbols are listed — the full list hasn't been built yet.</span>`)
+    + `<button class="btn ghost sm" data-catref ${CAT.running ? "disabled" : ""} title="Re-read every source's list of securities (happens by itself once a week)">↻ Refresh list</button>` + errs + warn;
+  const b = $("[data-catref]", el);
+  if (b) b.onclick = async () => {
+    try { CAT = await api.catalogRefresh(); renderCatLine(sel, withSources); watchCatalog(); } catch (e) { toast(e.message, "error"); }
+  };
+  $$("[data-uplink]", el).forEach((a) => a.onclick = (e) => { e.preventDefault(); showDataTab("upstox"); });
+}
+let catTimer = null;
+async function watchCatalog() {
+  clearTimeout(catTimer);
+  try { CAT = await api.catalogStatus(); } catch (e) { return; }
+  if (CAT.running) {
+    if (!$("#dataModal").classList.contains("hidden")) renderCatLine("#bkCat", true);
+    catTimer = setTimeout(watchCatalog, 2500);
+    return;
+  }
+  const before = S.symbols.length;
+  await refreshSymbols();
+  if (CAT.error) toast(`Couldn't build the security list: ${CAT.error}`, "error", false, 9000);
+  else if (S.symbols.length !== before) toast(`Security list ready — ${S.symbols.length.toLocaleString()} securities to search, group and download.`, "ok", false, 7000);
+  if (!$("#dataModal").classList.contains("hidden") && $("[data-dpanel=bulk]").classList.contains("active")) renderBulk();
+}
+
 async function refreshSymbols() {
   const r = await api.symbols();
   S.symbols = r.symbols; S.costs = r.costs;
+  CAT = { ...CAT, ...(r.catalog || {}) };
+  setSymbols(S.symbols);
+  if (r.catalog && r.catalog.running) { clearTimeout(catTimer); catTimer = setTimeout(watchCatalog, 2500); }
   if (!S.symbol || !S.symbols.find((s) => s.name === S.symbol)) S.symbol = (S.symbols.find((s) => s.stored.length) || S.symbols[0])?.name;
   updateSymLabel();
 }
@@ -1467,7 +1528,8 @@ async function boot() {
   renderIntervals();
   $("#start").value = S.start; $("#end").value = S.end;
   try {
-    const [, , ind, def] = await Promise.all([refreshSymbols(), loadStrategies(), api.indicators(), api.defaults()]);
+    const [, , ind, def] = await Promise.all([refreshSymbols(), loadStrategies(), api.indicators(), api.defaults(),
+      loadGroups().catch((e) => toast("Couldn't load your groups: " + e.message, "error"))]);
     S.indicatorDefs = ind.indicators; S.defaults = def; S.costs = def.costs;
     renderIndicatorList(); renderActiveIndicators(); renderStrategyDetail();
     try {                              // "Use in terminal" clicked while this tab was closed

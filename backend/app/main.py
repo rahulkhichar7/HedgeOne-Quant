@@ -14,7 +14,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import config
-from .api import data, engine, research
+from .api import data, engine, groups, research
 
 # make `import strategies` work regardless of the working directory
 if str(config.BACKEND_DIR) not in sys.path:
@@ -41,6 +41,14 @@ async def no_stale_ui(request, call_next):
 app.include_router(data.router)
 app.include_router(engine.router)
 app.include_router(research.router)
+app.include_router(groups.router)
+
+
+@app.on_event("startup")
+def refresh_security_list():
+    """Build / refresh the full security list in the background (weekly; instant if fresh)."""
+    from .data import store
+    store.start_catalog_build()
 
 
 @app.get("/api/health")
