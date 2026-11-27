@@ -662,6 +662,11 @@ async function fillDataForms() {
   if (!$("#dlEnd").value) $("#dlEnd").value = new Date().toISOString().slice(0, 10);
 }
 
+$("#dlStop").onclick = async () => {
+  if (!DL_JOB) return;
+  $("#dlStop").disabled = true;
+  try { await api.stopJob(DL_JOB); $("#dlStatus").textContent = "Stopping…"; } catch (e) { toast(e.message, "error"); $("#dlStop").disabled = false; }
+};
 $("#dlGo").onclick = async () => {
   if (!G.byName.has($("#dlSymbol").value)) { $("#dlStatus").textContent = "Pick a security from the list first."; return; }
   try {
@@ -671,12 +676,18 @@ $("#dlGo").onclick = async () => {
     pollJob(job);
   } catch (e) { $("#dlStatus").textContent = e.message; }
 };
+let DL_JOB = null;
 async function pollJob(id) {
+  DL_JOB = id;
+  $("#dlStop").classList.remove("hidden");
   const j = await api.job(id);
   $("#dlLog").textContent = j.log.join("\n");
   $("#dlLog").scrollTop = 1e9;
   if (j.status === "running") return setTimeout(() => pollJob(id), 1000);
-  if (j.status === "done") {
+  DL_JOB = null;
+  $("#dlStop").classList.add("hidden"); $("#dlStop").disabled = false;
+  if (j.status === "stopped") $("#dlStatus").innerHTML = `<span class="neg">■ Stopped</span> — nothing from this download was saved (data stored earlier is unchanged).`;
+  else if (j.status === "done") {
     $("#dlStatus").innerHTML = `<span class="pos">Done</span> — fetched ${j.result.fetched.toLocaleString()} candles, ${j.result.stored.toLocaleString()} stored.`;
     await refreshSymbols(); reload();
   } else $("#dlStatus").innerHTML = `<span class="neg">${esc(j.error)}</span>`;
@@ -752,7 +763,15 @@ function bulkSymbols() {        // what the quick buttons act on: the search res
   return q ? searchSymbols(q, (s) => !!SOURCES[s.source]) : S.symbols.filter((s) => SOURCES[s.source]);
 }
 const bkOn = (n) => !!(BULK.rows[n] && BULK.rows[n].on);
-const bkStTxt = (name) => { const x = BULK.state[name]; return x ? `<span class="st ${x.cls}">${esc(x.text)}</span>` : ""; };
+const bkStTxt = (name) => {
+  const x = BULK.state[name];
+  if (!x) return "";
+  const i = BULK.job && !x.stopping && (x.cls === "run" || x.cls === "queued") ? BULK.items.findIndex((it) => it.symbol === name) : -1;
+  const btn = i < 0 ? "" : x.cls === "run"
+    ? `<button class="btn ghost sm danger st-stop" data-stop="${i}" title="Stop this one — what it downloaded so far is discarded and the next in the queue starts">■ Stop</button>`
+    : `<button class="btn ghost sm st-stop" data-stop="${i}" title="Take it out of the queue">✕ Remove</button>`;
+  return `<span class="st ${x.cls}">${esc(x.text)}</span>${btn}`;
+};
 const bkTree = new SecTree({
   key: "bulk", el: $("#bkTable"), cols: 5, page: 100,
   head: `<tr><th class="t-ck"></th><th>Security</th><th>Interval</th><th>From</th><th>To</th><th>Stored (this interval)</th><th>Status</th></tr>`,
@@ -786,6 +805,28 @@ const bkTree = new SecTree({
   after: () => { bulkCount(); renderCatLine("#bkCat", true); },
 });
 function renderBulk() { bkTree.render(); }
+
+$("#bkTable").addEventListener("click", async (e) => {      // per-row ■ Stop / ✕ Remove
+  const b = e.target.closest("[data-stop]");
+  if (!b || !BULK.job) return;
+  const it = BULK.items[+b.dataset.stop];
+  b.disabled = true;
+  try {
+    await api.stopJob(BULK.job, +b.dataset.stop);
+    const x = BULK.state[it.symbol];
+    BULK.state[it.symbol] = { cls: x.cls, text: x.cls === "run" ? "stopping…" : "removing…", stopping: true };
+    renderBulk();
+  } catch (err) { toast(err.message, "error"); b.disabled = false; }
+});
+$("#bkStop").onclick = async () => {
+  if (!BULK.job) return;
+  $("#bkStop").disabled = true;
+  try {
+    await api.stopJob(BULK.job);
+    BULK.items.forEach((it) => { const x = BULK.state[it.symbol]; if (x && (x.cls === "run" || x.cls === "queued")) BULK.state[it.symbol] = { ...x, text: "stopping…", stopping: true }; });
+    renderBulk();
+  } catch (err) { toast(err.message, "error"); $("#bkStop").disabled = false; }
+};
 
 $("#bkTable").addEventListener("change", (e) => {          // per-row interval / from / to
   const el = e.target.closest("[data-k]");
@@ -836,6 +877,8 @@ function bulkCount() {
     (calls > 400 ? ` · <span title="Upstox allows 2,000 requests per 30 minutes; HedgeOne uses 1,600 and pauses / resumes by itself">≈ ${calls.toLocaleString()} Upstox requests` +
       (calls > 1600 ? ` → roughly <b>${hours < 1.5 ? Math.round(hours * 60) + " min" : hours.toFixed(1) + " h"}</b> at Upstox's limit` : "") + `</span>` : "");
   $("#bkGo").disabled = running || !sel.length;
+  $("#bkStop").classList.toggle("hidden", !running);
+  if (!running) $("#bkStop").disabled = false;
   ["#bkApply", "#bkFill"].forEach((id) => { $(id).disabled = running; });
 }
 
@@ -904,29 +947,45 @@ async function pollBulk() {
     if (m[2] === "running") BULK.state[it.symbol] = { cls: "run", text: "downloading…" };
     else if (m[2] === "done") { const [f, st] = m[3].split(" ").map(Number); BULK.state[it.symbol] = { cls: "ok", text: `✓ ${f.toLocaleString()} fetched · ${st.toLocaleString()} stored` }; }
     else if (m[2] === "error") BULK.state[it.symbol] = { cls: "err", text: "✗ " + m[3] };
+    else if (m[2] === "stopped") BULK.state[it.symbol] = { cls: "stop",
+      text: (BULK.state[it.symbol] || {}).cls === "run" ? "■ stopped — nothing of it saved" : "✕ removed from the queue" };
   }
   for (const line of j.log || []) {       // latest progress text of the running item
     const m = /^@log (\d+) (.*)$/.exec(line);
-    if (m && BULK.items[+m[1]] && BULK.state[BULK.items[+m[1]].symbol].cls === "run")
+    if (m && BULK.items[+m[1]] && BULK.state[BULK.items[+m[1]].symbol].cls === "run" && !BULK.state[BULK.items[+m[1]].symbol].stopping)
       BULK.state[BULK.items[+m[1]].symbol].text = (/^waiting|rate limit/.test(m[2]) ? "⏸ " : "downloading… ") + m[2].slice(0, 90);
   }
   if (j.status !== "running" && j.result) {
     j.result.results.forEach((r) => {
       const it = BULK.items[r.i];
+      if (r.stopped) { if ((BULK.state[it.symbol] || {}).cls !== "stop") BULK.state[it.symbol] = { cls: "stop", text: "■ stopped — nothing of it saved" }; return; }
       BULK.state[it.symbol] = r.ok ? { cls: "ok", text: `✓ ${r.fetched.toLocaleString()} fetched · ${r.stored.toLocaleString()} stored` } : { cls: "err", text: "✗ " + r.error };
     });
   }
-  done = Object.values(BULK.state).filter((x) => x.cls === "ok" || x.cls === "err").length;
+  done = BULK.items.filter((it) => ["ok", "err", "stop"].includes((BULK.state[it.symbol] || {}).cls)).length;
   BULK.done = done;
   $("#bkBar i").style.width = `${Math.round((done / BULK.items.length) * 100)}%`;
   if (j.status === "running") {
-    if (!$("#dataModal").classList.contains("hidden") && $("[data-dpanel=bulk]").classList.contains("active")) renderBulk(); else bulkCount();
+    if (!$("#dataModal").classList.contains("hidden") && $("[data-dpanel=bulk]").classList.contains("active")) {
+      // rebuild the table only when a row changes state; otherwise just refresh the status texts
+      // in place, so a ■ Stop button under the mouse is never replaced mid-click
+      const sig = BULK.items.map((it) => { const x = BULK.state[it.symbol] || {}; return x.cls + (x.stopping ? "!" : ""); }).join();
+      if (sig !== BULK.sig) { BULK.sig = sig; renderBulk(); }
+      else {
+        $$("#bkTable tr.t-m").forEach((tr) => {
+          const x = BULK.state[tr.dataset.n], sp = tr.querySelector("td.stc .st");
+          if (x && sp && sp.textContent !== x.text) sp.textContent = x.text;
+        });
+        bulkCount();
+      }
+    } else bulkCount();
     setTimeout(pollBulk, 1000);
     return;
   }
   BULK.job = null;
-  const ok = j.result ? j.result.ok : 0, failed = j.result ? j.result.failed : 0;
-  toast(j.status === "error" ? `Bulk download failed: ${j.error}` : `Bulk download finished — ${ok} done${failed ? `, ${failed} failed (see the Status column)` : ""}.`,
+  const ok = j.result ? j.result.ok : 0, failed = j.result ? j.result.failed : 0, stopped = j.result ? j.result.stopped || 0 : 0;
+  toast(j.status === "error" ? `Bulk download failed: ${j.error}`
+    : `Bulk download ${j.status === "stopped" ? "stopped" : "finished"} — ${ok} saved${stopped ? `, ${stopped} stopped / removed` : ""}${failed ? `, ${failed} failed (see the Status column)` : ""}.`,
     j.status === "error" || failed ? "error" : "ok", false, 9000);
   await refreshSymbols();
   BULK.inv = (await api.inventory().catch(() => ({ files: [] }))).files || [];

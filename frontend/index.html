@@ -163,7 +163,7 @@
           <label>To<input type="date" id="dlEnd"></label>
         </div>
         <p class="hint">Download the <b>finest</b> interval you'll need (e.g. 1m or 5m) — higher timeframes are built from it automatically. Re-downloading merges new candles into the stored file.</p>
-        <div class="row"><button class="btn primary" id="dlGo">Start download</button><span id="dlStatus" class="muted"></span></div>
+        <div class="row"><button class="btn primary" id="dlGo">Start download</button><button class="btn danger hidden" id="dlStop" title="Stop and discard this download (data stored earlier stays as it was)">■ Stop</button><span id="dlStatus" class="muted"></span></div>
         <pre id="dlLog" class="log"></pre>
       </section>
       <section data-dpanel="bulk">
@@ -183,11 +183,13 @@
         <div class="table-wrap bulk-wrap"><table class="grid bulk tree" id="bkTable"></table></div>
         <div class="row">
           <span id="bkCount" class="grow muted"></span>
+          <button class="btn danger hidden" id="bkStop" title="Stop everything: the securities downloading now are discarded, the queued ones are dropped. Finished ones stay saved.">■ Stop all</button>
           <button class="btn primary" id="bkGo">Start downloading</button>
         </div>
         <div class="pbar2 hidden" id="bkBar"><i></i></div>
         <p class="hint">Downloads run in the background with one queue per source — Upstox, Delta and CoinDCX download in parallel, each within its own request limit (each also fetches a few securities at once). One failure never stops the rest, and you can close this dialog.
-          Limits used: Upstox ≤ 80% of its limits (40/s, 400/min, 1,600 per 30 min), Delta ≤ 75% of its 5-minute quota, CoinDCX ≤ 8/s. When a budget is used up — or the exchange says "too many requests" — that queue waits and resumes by itself (shown in the Status column). Each row can have its own interval and period; the bar above sets them for all ticked rows at once.</p>
+          Limits used: Upstox ≤ 80% of its limits (40/s, 400/min, 1,600 per 30 min), Delta ≤ 75% of its 5-minute quota, CoinDCX ≤ 8/s. When a budget is used up — or the exchange says "too many requests" — that queue waits and resumes by itself (shown in the Status column). Each row can have its own interval and period; the bar above sets them for all ticked rows at once.
+          While it runs: <b>■ Stop</b> on a row stops that security (what it fetched so far is discarded) and the next in its queue starts; <b>✕ Remove</b> takes a queued one out; <b>■ Stop all</b> ends everything. Securities that already finished stay saved.</p>
       </section>
       <section data-dpanel="stored">
         <div class="table-wrap"><table class="grid" id="storedTable"></table></div>

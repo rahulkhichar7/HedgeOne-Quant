@@ -130,6 +130,15 @@ def update(symbol: str, interval: str):
         fail(e)
 
 
+@router.post("/jobs/{jid}/stop")
+def stop_job(jid: str, item: int | None = None):
+    """Stop a running download. With ?item=<n>: stop only that security of a bulk download."""
+    try:
+        return store.stop_job(jid, item)
+    except Exception as e:  # noqa: BLE001
+        fail(e)
+
+
 @router.get("/jobs/{jid}")
 def job(jid: str):
     if jid not in store.JOBS:

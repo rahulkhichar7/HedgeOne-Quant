@@ -454,3 +454,7 @@ table.bulk.tree tr.t-m td.t-nm { max-width: 340px; }
 .btn.danger.sure { background: var(--down); color: #fff; border-color: var(--down); }
 table.tree tr.t-g.auto b::before { content: "⬇ "; color: var(--up); font-weight: 400; }
 td.nowrap { white-space: nowrap; }
+.st.stop { color: var(--warn); }
+.st-stop { margin-left: 8px; padding: 0 7px !important; line-height: 18px; }
+.btn.danger:not(.ghost) { background: transparent; color: var(--down); border: 1px solid var(--down); }
+.btn.danger:not(.ghost):hover { background: var(--down); color: #fff; }
